@@ -2,22 +2,25 @@ import { Redirect } from "expo-router";
 import { useAuth } from "@/contexts/AuthContext";
 
 export default function Index() {
-  const { profile, loading } = useAuth();
-
-  console.log("INDEX", { loading, profile });
+  const { user, profile, loading } = useAuth();
 
   if (loading) return null;
 
-  if (!profile) {
+  if (!user) {
     return <Redirect href="/login" />;
   }
 
-  switch (profile.activeRole) {
-    case "admin":
-      return <Redirect href="/(admin)/" />;
-    case "leader":
-      return <Redirect href="/(leader)/" />;
-    default:
-      return <Redirect href="/(member)/" />;
+  if (!profile) return null;
+
+  if (profile.activeRole.includes("admin")) {
+    return <Redirect href="/(protected)/(admin)/dashboard" />;
+  }
+
+  if (profile.activeRole.includes("leader")) {
+    return <Redirect href="/(protected)/(leader)/dashboard" />;
+  }
+
+  if (profile.activeRole.includes("member")) {
+    return <Redirect href="/(protected)/(member)/dashboard" />;
   }
 }

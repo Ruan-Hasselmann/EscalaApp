@@ -1,14 +1,41 @@
-import { Redirect, Stack } from "expo-router";
-import { useAuth } from "@/contexts/AuthContext";
+import { Tabs } from "expo-router";
+import { useTheme } from "@/contexts/ThemeContext";
+import { Ionicons } from "@expo/vector-icons";
 
 export default function MemberLayout() {
-  const { profile, loading } = useAuth();
+  const { theme } = useTheme();
 
-  if (loading) return null;
+  return (
+    <Tabs
+      screenOptions={{
+        headerShown: false,
+        tabBarActiveTintColor: theme.colors.primary,
+        tabBarInactiveTintColor: theme.colors.textMuted,
+        tabBarStyle: {
+          backgroundColor: theme.colors.surface,
+          borderTopColor: theme.colors.border,
+        },
+      }}
+    >
+      <Tabs.Screen
+        name="dashboard"
+        options={{
+          title: "Dashboard",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="apps" size={size} color={color} />
+          ),
+        }}
+      />
 
-  if (!profile?.roles.includes("member")) {
-    return <Redirect href="/" />;
-  }
-
-  return <Stack screenOptions={{ headerShown: false }} />;
+      <Tabs.Screen
+        name="calendar"
+        options={{
+          title: "Agenda",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="calendar" size={size} color={color} />
+          ),
+        }}
+      />
+    </Tabs>
+  );
 }

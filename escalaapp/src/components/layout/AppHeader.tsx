@@ -16,7 +16,7 @@ export function AppHeader({ title, left, right }: Props) {
             style={[
                 styles.container,
                 {
-                    backgroundColor: theme.colors.surface,
+                    backgroundColor: theme.colors.background,
                     borderBottomColor: theme.colors.border,
                 },
             ]}
