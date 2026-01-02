@@ -1,19 +1,12 @@
-import { db } from "@/services/firebase";
-import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, onSnapshot, setDoc, updateDoc } from "firebase/firestore";
+import { db } from "./firebase";
+import type { AppUserProfile, SystemRole } from "@/types/user";
 
-export type UserRole = "admin" | "leader" | "member";
+/* =========================
+   GET
+========================= */
 
-export type AppUserProfile = {
-  uid: string;
-  roles: UserRole[];   // ⬅️ IMPORTANTE (já ajustado)
-  activeRole: UserRole;
-  active: boolean;
-  name?: string;
-};
-
-export async function getUserProfile(
-  uid: string
-): Promise<AppUserProfile | null> {
+export async function getUserProfile(uid: string) {
   const ref = doc(db, "users", uid);
   const snap = await getDoc(ref);
 
@@ -25,41 +18,55 @@ export async function getUserProfile(
   };
 }
 
-export function defaultRolesFor(role: UserRole): UserRole[] {
-  if (role === "admin") return ["admin", "leader", "member"];
-  if (role === "leader") return ["leader", "member"];
-  return ["member"];
-}
+/* =========================
+   REALTIME
+========================= */
 
-export async function bootstrapUserProfile(
+export function listenUserProfile(
   uid: string,
-  params?: { role?: UserRole; name?: string }
-): Promise<AppUserProfile> {
+  cb: (profile: AppUserProfile | null) => void
+) {
   const ref = doc(db, "users", uid);
-  const snap = await getDoc(ref);
 
-  if (snap.exists()) {
-    return {
+  return onSnapshot(ref, (snap) => {
+    if (!snap.exists()) {
+      cb(null);
+      return;
+    }
+
+    cb({
       uid,
       ...(snap.data() as Omit<AppUserProfile, "uid">),
-    };
-  }
+    });
+  });
+}
 
-  const initialRole: UserRole = params?.role ?? "member";
-  const roles = defaultRolesFor(initialRole);
+/* =========================
+   CREATE
+========================= */
 
-  const profile: Omit<AppUserProfile, "uid"> = {
-    roles,
-    activeRole: initialRole,
-    active: true,
-    ...(params?.name ? { name: params.name } : {}),
-  };
+export async function createUserProfile(profile: AppUserProfile) {
+  const ref = doc(db, "users", profile.uid);
 
   await setDoc(ref, {
-    ...profile,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
+    name: profile.name,
+    email: profile.email,
+    roles: profile.roles,
+    activeRole: profile.activeRole,
   });
+}
 
-  return { uid, ...profile };
+/* =========================
+   UPDATE
+========================= */
+
+export async function setActiveRole(
+  uid: string,
+  role: SystemRole
+) {
+  const ref = doc(db, "users", uid);
+
+  await updateDoc(ref, {
+    activeRole: role,
+  });
 }

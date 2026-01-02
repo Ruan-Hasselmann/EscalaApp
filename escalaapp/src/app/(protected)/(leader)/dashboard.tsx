@@ -32,7 +32,7 @@ export default function LeaderDashboard() {
           title="Escalas"
           description="Gerar e gerenciar escalas"
           onPress={() =>
-            router.push("/(protected)/(leader)/schedule")
+            router.push("/(protected)/(leader)/schedules")
           }
         />
 

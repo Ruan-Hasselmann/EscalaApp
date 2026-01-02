@@ -9,6 +9,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 
 export default function AdminDashboard() {
+  const { logout } = useAuth();
   const { profile } = useAuth();
   const { theme } = useTheme();
   const router = useRouter();
@@ -70,6 +71,12 @@ export default function AdminDashboard() {
           onPress={() =>
             router.push("/(protected)/(admin)/settings")
           }
+        />
+        <ActionListItem
+          icon="⚙️"
+          title="Logout"
+          description=""
+          onPress={logout}
         />
       </ActionList>
     </AppScreen>

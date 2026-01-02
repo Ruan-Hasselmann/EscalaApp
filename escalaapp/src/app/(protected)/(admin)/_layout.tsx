@@ -35,15 +35,25 @@ export default function AdminLayout() {
         }}
       />
 
-      {/* <Tabs.Screen
-        name="schedules"
+      <Tabs.Screen
+        name="availability"
         options={{
-          title: "Escalas",
+          title: "Disponibilidade",
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="apps" size={size} color={color} />
+            <Ionicons name="checkbox" size={size} color={color} />
           ),
         }}
-      /> */}
+      />
+
+      <Tabs.Screen
+        name="service-days/index"
+        options={{
+          title: "Cultos",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="ribbon" size={size} color={color} />
+          ),
+        }}
+      />
     </Tabs>
   );
 }

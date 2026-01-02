@@ -1,6 +1,7 @@
 import { useTheme } from "@/contexts/ThemeContext";
 import { ReactNode } from "react";
-import { SafeAreaView, StyleSheet, View } from "react-native";
+import { ScrollView, StyleSheet, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 
 type Props = {
@@ -24,7 +25,12 @@ export function AppScreen({ children, padded = true }: Props) {
           padded && { padding: theme.spacing.md },
         ]}
       >
-        {children}
+        <ScrollView
+          showsVerticalScrollIndicator={false} // Esconde a barra vertical
+          showsHorizontalScrollIndicator={false} // Esconde a barra horizontal (se houver)
+          style={{ flex: 1 }}>
+          {children}
+        </ScrollView>
       </View>
     </SafeAreaView>
   );
