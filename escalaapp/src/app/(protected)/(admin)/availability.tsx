@@ -13,8 +13,11 @@ import {
    HELPERS
 ========================= */
 
-function toDateKey(d: Date) {
-  return d.toISOString().slice(0, 10);
+function toDateKey(date: Date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
 
 function sameDay(a: Date, b: Date) {
@@ -70,6 +73,16 @@ export default function AdminAvailability() {
      LISTENER
   ========================= */
 
+  function parseDateKeyStart(dateKey: string): Date {
+    const [y, m, d] = dateKey.split("-").map(Number);
+    return new Date(y, m - 1, d, 0, 0, 0, 0);
+  }
+
+  function parseDateKeyEnd(dateKey: string): Date {
+    const [y, m, d] = dateKey.split("-").map(Number);
+    return new Date(y, m - 1, d, 23, 59, 59, 999);
+  }
+
   useEffect(() => {
     return listenAvailabilityWindow((data) => {
       if (!data) {
@@ -78,8 +91,8 @@ export default function AdminAvailability() {
       }
 
       setWindow({
-        start: new Date(data.startDate),
-        end: new Date(data.endDate),
+        start: parseDateKeyStart(data.startDate),
+        end: parseDateKeyEnd(data.endDate),
         open: data.open,
       });
     });
@@ -124,9 +137,23 @@ export default function AdminAvailability() {
   async function saveWindow() {
     if (!selecting.start || !selecting.end) return;
 
+    const start = new Date(
+      selecting.start.getFullYear(),
+      selecting.start.getMonth(),
+      selecting.start.getDate(),
+      12, 0, 0
+    );
+
+    const end = new Date(
+      selecting.end.getFullYear(),
+      selecting.end.getMonth(),
+      selecting.end.getDate(),
+      12, 0, 0
+    );
+
     await setAvailabilityWindow({
-      startDate: toDateKey(selecting.start),
-      endDate: toDateKey(selecting.end),
+      startDate: toDateKey(start),
+      endDate: toDateKey(end),
       open: true,
     });
 
@@ -159,7 +186,7 @@ export default function AdminAvailability() {
             onPress={() => changeMonth(-1)}
             style={[styles.monthBtn, { borderColor: theme.colors.border }]}
           >
-            <Text style={{ color: theme.colors.text, fontSize: 30 }}>◀</Text>
+            <Text style={{ color: theme.colors.text, fontSize: 20 }}>◀</Text>
           </Pressable>
 
           <Text style={{ color: theme.colors.text, fontWeight: "600", fontSize: 20 }}>
@@ -170,7 +197,7 @@ export default function AdminAvailability() {
             onPress={() => changeMonth(1)}
             style={[styles.monthBtn, { borderColor: theme.colors.border }]}
           >
-            <Text style={{ color: theme.colors.text, fontSize: 30 }}>▶</Text>
+            <Text style={{ color: theme.colors.text, fontSize: 20 }}>▶</Text>
           </Pressable>
         </View>
 

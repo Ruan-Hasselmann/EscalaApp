@@ -16,11 +16,12 @@ import { db } from "./firebase";
 export type MemberAvailabilityStatus = "available" | "unavailable";
 
 export type MemberAvailability = {
-  id: string; // uid__YYYY-MM-DD
-  uid: string;
-  dateKey: string; // YYYY-MM-DD
+  id: string; // userId__YYYY-MM-DD__serviceId
+  userId: string;
+  dateKey: string;     // YYYY-MM-DD
+  serviceId: string;   // manha | noite | especial | etc
   year: number;
-  month: number; // 0-11
+  month: number;       // 0-11
   status: MemberAvailabilityStatus;
   updatedAt: number;
 };
@@ -29,8 +30,12 @@ export type MemberAvailability = {
    HELPERS
 ========================= */
 
-function docId(uid: string, dateKey: string) {
-  return `${uid}__${dateKey}`;
+function availabilityDocId(
+  userId: string,
+  dateKey: string,
+  serviceId: string
+) {
+  return `${userId}__${dateKey}__${serviceId}`;
 }
 
 /* =========================
@@ -38,14 +43,14 @@ function docId(uid: string, dateKey: string) {
 ========================= */
 
 export function listenMemberAvailabilityByMonth(
-  uid: string,
+  userId: string,
   year: number,
   month: number,
   callback: (items: MemberAvailability[]) => void
 ) {
   const q = query(
     collection(db, "memberAvailability"),
-    where("uid", "==", uid),
+    where("userId", "==", userId),
     where("year", "==", year),
     where("month", "==", month)
   );
@@ -65,19 +70,25 @@ export function listenMemberAvailabilityByMonth(
 ========================= */
 
 export async function setMemberAvailability(
-  uid: string,
+  userId: string,
   dateKey: string,
+  serviceId: string,
   year: number,
   month: number,
   status: MemberAvailabilityStatus
 ) {
-  const ref = doc(db, "memberAvailability", docId(uid, dateKey));
+  const ref = doc(
+    db,
+    "memberAvailability",
+    availabilityDocId(userId, dateKey, serviceId)
+  );
 
   await setDoc(
     ref,
     {
-      uid,
+      userId,
       dateKey,
+      serviceId,
       year,
       month,
       status,
@@ -91,31 +102,57 @@ export async function setMemberAvailability(
    CLEAR (REMOVE DOC)
 ========================= */
 
-export async function clearMemberAvailability(uid: string, dateKey: string) {
-  await deleteDoc(doc(db, "memberAvailability", docId(uid, dateKey)));
+export async function clearMemberAvailability(
+  userId: string,
+  dateKey: string,
+  serviceId: string
+) {
+  await deleteDoc(
+    doc(
+      db,
+      "memberAvailability",
+      availabilityDocId(userId, dateKey, serviceId)
+    )
+  );
 }
 
 /* =========================
-   TOGGLE (none -> available -> unavailable -> none)
+   TOGGLE
+   none → available → unavailable → none
 ========================= */
 
 export async function toggleMemberAvailability(
-  uid: string,
+  userId: string,
   dateKey: string,
+  serviceId: string,
   year: number,
   month: number,
   current: MemberAvailabilityStatus | null
-) {
+): Promise<MemberAvailabilityStatus | null> {
   if (!current) {
-    await setMemberAvailability(uid, dateKey, year, month, "available");
+    await setMemberAvailability(
+      userId,
+      dateKey,
+      serviceId,
+      year,
+      month,
+      "available"
+    );
     return "available";
   }
 
   if (current === "available") {
-    await setMemberAvailability(uid, dateKey, year, month, "unavailable");
+    await setMemberAvailability(
+      userId,
+      dateKey,
+      serviceId,
+      year,
+      month,
+      "unavailable"
+    );
     return "unavailable";
   }
 
-  await clearMemberAvailability(uid, dateKey);
+  await clearMemberAvailability(userId, dateKey, serviceId);
   return null;
 }

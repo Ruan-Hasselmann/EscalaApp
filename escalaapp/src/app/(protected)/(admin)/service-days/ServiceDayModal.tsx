@@ -26,6 +26,13 @@ type Props = {
 
 const TURN_OPTIONS = ["Manhã", "Tarde", "Noite"] as const;
 
+function toDateKey(date: Date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 export function ServiceDayModal({
   visible,
   date,
@@ -46,7 +53,7 @@ export function ServiceDayModal({
 
   if (!date) return null;
 
-  const dateKey = date.toISOString().slice(0, 10);
+  const dateKey = toDateKey(date);
   const year = date.getFullYear();
   const month = date.getMonth();
   const day = date.getDate();
@@ -261,12 +268,12 @@ export function ServiceDayModal({
           <Pressable
             onPress={onClose}
             style={[
-                styles.button,
-                {
-                  backgroundColor: theme.colors.background,
-                  marginTop: 16,
-                },
-              ]}
+              styles.button,
+              {
+                backgroundColor: theme.colors.background,
+                marginTop: 16,
+              },
+            ]}
           >
             <Text style={{ color: theme.colors.textMuted }}>
               Fechar

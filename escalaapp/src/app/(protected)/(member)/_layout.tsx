@@ -32,6 +32,15 @@ export default function MemberLayout() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="availability"
+        options={{
+          title: "Disponibilidade",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="checkbox" size={size} color={color} />
+          ),
+        }}
+      />
 
       <Tabs.Screen
         name="calendar"

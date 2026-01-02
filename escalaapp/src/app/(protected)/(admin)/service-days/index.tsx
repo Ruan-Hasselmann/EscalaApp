@@ -88,7 +88,10 @@ export default function AdminServiceDays() {
   }
 
   function getDateKey(date: Date) {
-    return date.toISOString().slice(0, 10);
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
   }
 
   /* =========================
@@ -99,31 +102,31 @@ export default function AdminServiceDays() {
     <AppScreen>
       <AppHeader title="📅 Dias de Culto" />
 
-      {/* CONTROLE DE MÊS */}
-      <View style={styles.monthRow}>
-        <Pressable
-          onPress={() => changeMonth(-1)}
-          style={[styles.monthBtn, { borderColor: theme.colors.border }]}
-        >
-          <Text style={{ color: theme.colors.text }}>◀</Text>
-        </Pressable>
-
-        <Text style={{ color: theme.colors.text, fontWeight: "600" }}>
-          {new Date(year, month).toLocaleDateString("pt-BR", {
-            month: "long",
-            year: "numeric",
-          })}
-        </Text>
-
-        <Pressable
-          onPress={() => changeMonth(1)}
-          style={[styles.monthBtn, { borderColor: theme.colors.border }]}
-        >
-          <Text style={{ color: theme.colors.text }}>▶</Text>
-        </Pressable>
-      </View>
-
       <View style={styles.calendarWrapper}>
+        {/* CONTROLE DE MÊS */}
+        <View style={styles.monthRow}>
+          <Pressable
+            onPress={() => changeMonth(-1)}
+            style={[styles.monthBtn, { borderColor: theme.colors.border }]}
+          >
+            <Text style={{ color: theme.colors.text, fontSize: 20 }}>◀</Text>
+          </Pressable>
+
+          <Text style={{ color: theme.colors.text, fontWeight: "600", fontSize: 20 }}>
+            {new Date(year, month).toLocaleDateString("pt-BR", {
+              month: "long",
+              year: "numeric",
+            })}
+          </Text>
+
+          <Pressable
+            onPress={() => changeMonth(1)}
+            style={[styles.monthBtn, { borderColor: theme.colors.border }]}
+          >
+            <Text style={{ color: theme.colors.text, fontSize: 20 }}>▶</Text>
+          </Pressable>
+        </View>
+
         {/* DIAS DA SEMANA */}
         <View style={styles.weekRow}>
           {WEEK_DAYS.map((d) => (
@@ -175,9 +178,9 @@ export default function AdminServiceDays() {
                 {hasServices && (
                   <Text
                     style={{
-                      fontSize: 10,
+                      fontSize: 12,
                       color: theme.colors.primaryContrast,
-                      marginTop: 2,
+                      marginTop: 4,
                     }}
                   >
                     {dayData.services.length} culto(s)
@@ -237,26 +240,27 @@ const styles = StyleSheet.create({
 
   monthBtn: {
     borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
   },
 
   calendarWrapper: {
     alignSelf: "center",
     width: "100%",
-    maxWidth: 420, // 🔑 controla tamanho no web
+    maxWidth: 420, // 🔑 igual AdminAvailability
   },
 
   weekRow: {
     flexDirection: "row",
+    marginBottom: 6,
   },
 
   weekDay: {
-    flex: 1,                // 🔑 alinhamento perfeito
+    flex: 1,
     textAlign: "center",
     fontSize: 12,
-    marginBottom: 6,
+    fontWeight: "600",
   },
 
   grid: {
@@ -265,7 +269,7 @@ const styles = StyleSheet.create({
   },
 
   cell: {
-    width: "14.2857%",      // 🔑 exatamente 100 / 7
+    width: "14.2857%",
     aspectRatio: 1,
     borderWidth: 1,
     borderRadius: 10,

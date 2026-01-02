@@ -216,6 +216,13 @@ export async function copyServiceDaysFromPreviousMonthByOrder(
   // 2️⃣ Percorre dias do mês atual
   const lastDay = new Date(year, month + 1, 0).getDate();
 
+  function toDateKey(date: Date) {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+
   for (let day = 1; day <= lastDay; day++) {
     const date = new Date(year, month, day);
     const dayOfWeek = date.getDay();
@@ -224,7 +231,7 @@ export async function copyServiceDaysFromPreviousMonthByOrder(
     const source = byWeekAndOrder[dayOfWeek]?.[order];
     if (!source) continue;
 
-    const dateKey = date.toISOString().slice(0, 10);
+    const dateKey = toDateKey(date);
     const ref = doc(db, "serviceDays", dateKey);
 
     // não sobrescreve se já existir
