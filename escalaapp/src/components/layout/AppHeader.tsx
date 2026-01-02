@@ -40,7 +40,7 @@ export function AppHeader({ title, back }: Props) {
                 {title}
             </Text>
             <Pressable
-                onPress={() => logout}
+                onPress={() => logout()}
                 style={[styles.monthBtn, { borderColor: theme.colors.border }]}
             >
                 <Text style={{ color: theme.colors.text }}>Sair</Text>

@@ -1,41 +1,42 @@
-import { Stack, Redirect, useSegments } from "expo-router";
+
 import { useAuth } from "@/contexts/AuthContext";
+import { Slot, useRouter } from "expo-router";
+import { useEffect } from "react";
+import { ActivityIndicator, View } from "react-native";
 
 export default function ProtectedLayout() {
-  const { user, profile, loading } = useAuth();
-  const segments = useSegments();
+  const { user, loading, profile } = useAuth();
+  const router = useRouter();
 
-  // Enquanto carrega auth + profile
-  if (loading) return null;
+  useEffect(() => {
+    if (loading) return;
 
-  // Não logado → login
-  if (!user) {
-    return <Redirect href="/login" />;
+    if (!user) {
+      router.replace("/login");
+      return;
+    }
+
+    if (profile?.activeRole === "admin") {
+      router.replace("/(protected)/(admin)/dashboard");
+      return;
+    }
+
+    if (profile?.activeRole === "leader") {
+      router.replace("/(protected)/(leader)/dashboard");
+      return;
+    }
+
+    router.replace("/(protected)/(member)/dashboard");
+  }, [loading, profile?.activeRole]);
+
+  // 🔒 Enquanto decide rota, não renderiza nada
+  if (loading || !user) {
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
   }
 
-  // Ainda sem profile
-  if (!profile) return null;
-
-  // segments exemplo:
-  // ['(protected)', '(admin)', 'index']
-  const [, area] = segments as string[];
-
-  const roles = profile.roles;
-
-  // ADMIN
-  if (area === "(admin)" && !roles.includes("admin")) {
-    return <Redirect href="/home" />;
-  }
-
-  // LEADER
-  if (area === "(leader)" && !roles.includes("leader")) {
-    return <Redirect href="/home" />;
-  }
-
-  // MEMBER
-  if (area === "(member)" && !roles.includes("member")) {
-    return <Redirect href="/home" />;
-  }
-
-  return <Stack screenOptions={{ headerShown: false }} />;
+  return <Slot />;
 }

@@ -1,6 +1,6 @@
 
 import { auth, db } from "@/services/firebase";
-import { AppUserProfile } from "@/services/users";
+import { AppUserProfile } from "@/types/user";
 import {
   onAuthStateChanged,
   signInWithEmailAndPassword,

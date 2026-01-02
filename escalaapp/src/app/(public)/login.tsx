@@ -7,6 +7,7 @@ import {
   View,
   ActivityIndicator,
 } from "react-native";
+import { useRouter } from "expo-router";
 
 import { AppScreen } from "@/components/layout/AppScreen";
 import { useAuth } from "@/contexts/AuthContext";
@@ -15,6 +16,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 export default function Login() {
   const { login } = useAuth();
   const { theme } = useTheme();
+  const router = useRouter();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -32,7 +34,7 @@ export default function Login() {
       setError(null);
       await login(email.trim(), password);
       // redirect automático pelo guard (_layout)
-    } catch (err: any) {
+    } catch {
       setError("Email ou senha inválidos.");
     } finally {
       setLoading(false);
@@ -42,24 +44,18 @@ export default function Login() {
   return (
     <AppScreen>
       <View style={styles.container}>
-        <Text
-          style={[
-            styles.title,
-            { color: theme.colors.text },
-          ]}
-        >
+        {/* HEADER */}
+        <Text style={[styles.title, { color: theme.colors.text }]}>
           🔐 Entrar
         </Text>
 
         <Text
-          style={[
-            styles.subtitle,
-            { color: theme.colors.textMuted },
-          ]}
+          style={[styles.subtitle, { color: theme.colors.textMuted }]}
         >
           Acesse sua conta para continuar
         </Text>
 
+        {/* EMAIL */}
         <TextInput
           value={email}
           onChangeText={setEmail}
@@ -76,6 +72,7 @@ export default function Login() {
           ]}
         />
 
+        {/* SENHA */}
         <TextInput
           value={password}
           onChangeText={setPassword}
@@ -91,17 +88,16 @@ export default function Login() {
           ]}
         />
 
+        {/* ERRO */}
         {error && (
           <Text
-            style={[
-              styles.error,
-              { color: theme.colors.danger },
-            ]}
+            style={[styles.error, { color: theme.colors.danger }]}
           >
             {error}
           </Text>
         )}
 
+        {/* LOGIN */}
         <Pressable
           onPress={handleLogin}
           disabled={loading}
@@ -114,22 +110,56 @@ export default function Login() {
           ]}
         >
           {loading ? (
-            <ActivityIndicator color={theme.colors.primaryContrast} />
+            <ActivityIndicator
+              color={theme.colors.primaryContrast}
+            />
           ) : (
             <Text
               style={{
                 color: theme.colors.primaryContrast,
-                fontWeight: theme.typography.weights.semibold,
+                fontWeight:
+                  theme.typography.weights.semibold,
               }}
             >
               Entrar
             </Text>
           )}
         </Pressable>
+
+        {/* LINKS */}
+        <View style={styles.links}>
+          <Pressable onPress={() => router.push("/register")}>
+            <Text
+              style={[
+                styles.link,
+                { color: theme.colors.primary },
+              ]}
+            >
+              Criar conta
+            </Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() => router.push("/forgot-password")}
+          >
+            <Text
+              style={[
+                styles.link,
+                { color: theme.colors.textMuted },
+              ]}
+            >
+              Esqueci minha senha
+            </Text>
+          </Pressable>
+        </View>
       </View>
     </AppScreen>
   );
 }
+
+/* =========================
+   STYLES
+========================= */
 
 const styles = StyleSheet.create({
   container: {
@@ -163,5 +193,14 @@ const styles = StyleSheet.create({
   error: {
     fontSize: 14,
     textAlign: "center",
+  },
+  links: {
+    marginTop: 16,
+    gap: 12,
+    alignItems: "center",
+  },
+  link: {
+    fontSize: 14,
+    fontWeight: "600",
   },
 });
