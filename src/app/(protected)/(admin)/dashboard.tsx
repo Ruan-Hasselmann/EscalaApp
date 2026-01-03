@@ -72,12 +72,6 @@ export default function AdminDashboard() {
             router.push("/(protected)/(admin)/settings")
           }
         />
-        <ActionListItem
-          icon="⚙️"
-          title="Logout"
-          description=""
-          onPress={logout}
-        />
       </ActionList>
     </AppScreen>
   );

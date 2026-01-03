@@ -54,6 +54,37 @@ export default function AdminLayout() {
           ),
         }}
       />
+
+      <Tabs.Screen
+        name="people/index"
+        options={{
+          title: "Pessoas",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="people" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="ministries/ministries"
+        options={{
+          title: "Ministerios",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="school" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="ministries/[id]"
+        options={{
+          href: null
+        }}
+      />
+      <Tabs.Screen
+        name="ministries/MinistryModal"
+        options={{
+          href: null
+        }}
+      />
     </Tabs>
   );
 }

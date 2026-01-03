@@ -1,15 +1,29 @@
 import {
-  addDoc,
   collection,
-  getDocs,
-  updateDoc,
   doc,
+  getDocs,
+  onSnapshot,
+  updateDoc,
 } from "firebase/firestore";
 import { db } from "./firebase";
-import type { Ministry } from "@/types/ministry";
 
 /* =========================
-   LIST
+   TYPES
+========================= */
+
+export type Ministry = {
+  id: string;
+  name: string;
+  description?: string;
+  active: boolean;
+
+  // 🔹 dados agregados (não obrigatórios no Firestore)
+  membersCount?: number;
+  leadersCount?: number;
+};
+
+/* =========================
+   LIST (ONCE)
 ========================= */
 
 export async function listMinistries(): Promise<Ministry[]> {
@@ -22,23 +36,31 @@ export async function listMinistries(): Promise<Ministry[]> {
 }
 
 /* =========================
-   CREATE
+   LISTEN (REALTIME)
 ========================= */
 
-export async function createMinistry(name: string) {
-  await addDoc(collection(db, "ministries"), {
-    name,
-    active: true,
+export function listenMinistries(
+  callback: (ministries: Ministry[]) => void
+) {
+  return onSnapshot(collection(db, "ministries"), (snap) => {
+    const list: Ministry[] = snap.docs.map((d) => ({
+      id: d.id,
+      ...(d.data() as Omit<Ministry, "id">),
+    }));
+
+    callback(list);
   });
 }
 
 /* =========================
-   UPDATE
+   TOGGLE ACTIVE
 ========================= */
 
-export async function setMinistryActive(
-  id: string,
+export async function toggleMinistryActive(
+  ministryId: string,
   active: boolean
 ) {
-  await updateDoc(doc(db, "ministries", id), { active });
+  await updateDoc(doc(db, "ministries", ministryId), {
+    active,
+  });
 }

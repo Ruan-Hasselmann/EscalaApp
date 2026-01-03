@@ -1,72 +1,75 @@
-import { doc, getDoc, onSnapshot, setDoc, updateDoc } from "firebase/firestore";
+import {
+  collection,
+  doc,
+  getDoc,
+  onSnapshot,
+  orderBy,
+  query,
+  updateDoc,
+} from "firebase/firestore";
 import { db } from "./firebase";
-import type { AppUserProfile, SystemRole } from "@/types/user";
 
 /* =========================
-   GET
+   TYPES
 ========================= */
 
-export async function getUserProfile(uid: string) {
-  const ref = doc(db, "users", uid);
-  const snap = await getDoc(ref);
+export type AppUser = {
+  id: string;
+  name: string;
+  email: string;
+  active: boolean;
+};
 
+/* =========================
+   REALTIME LISTENER
+========================= */
+
+export function listenUsers(
+  callback: (users: AppUser[]) => void
+) {
+  const q = query(
+    collection(db, "users"),
+    orderBy("name")
+  );
+
+  return onSnapshot(q, (snap) => {
+    const list: AppUser[] = snap.docs.map((d) => ({
+      id: d.id,
+      ...(d.data() as Omit<AppUser, "id">),
+    }));
+
+    callback(list);
+  });
+}
+
+/* =========================
+   TOGGLE ACTIVE
+========================= */
+
+export async function toggleUserActive(
+  userId: string,
+  active: boolean
+) {
+  await updateDoc(doc(db, "users", userId), { active });
+}
+
+export async function getUserById(
+  id: string
+): Promise<AppUser | null> {
+  const snap = await getDoc(doc(db, "users", id));
   if (!snap.exists()) return null;
 
   return {
-    uid,
-    ...(snap.data() as Omit<AppUserProfile, "uid">),
+    id: snap.id,
+    ...(snap.data() as Omit<AppUser, "id">),
   };
 }
 
-/* =========================
-   REALTIME
-========================= */
-
-export function listenUserProfile(
-  uid: string,
-  cb: (profile: AppUserProfile | null) => void
+export async function updateActiveRole(
+  userId: string,
+  activeRole: "admin" | "leader" | "member"
 ) {
-  const ref = doc(db, "users", uid);
-
-  return onSnapshot(ref, (snap) => {
-    if (!snap.exists()) {
-      cb(null);
-      return;
-    }
-
-    cb({
-      uid,
-      ...(snap.data() as Omit<AppUserProfile, "uid">),
-    });
-  });
-}
-
-/* =========================
-   CREATE
-========================= */
-
-export async function createUserProfile(profile: AppUserProfile) {
-  const ref = doc(db, "users", profile.uid);
-
-  await setDoc(ref, {
-    name: profile.name,
-    email: profile.email,
-    roles: profile.roles,
-    activeRole: profile.activeRole,
-  });
-}
-
-/* =========================
-   UPDATE
-========================= */
-
-export async function setActiveRole(
-  uid: string,
-  role: SystemRole
-) {
-  const ref = doc(db, "users", uid);
-
-  await updateDoc(ref, {
-    activeRole: role,
+  await updateDoc(doc(db, "users", userId), {
+    activeRole,
   });
 }

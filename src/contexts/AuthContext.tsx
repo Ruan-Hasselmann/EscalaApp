@@ -1,4 +1,3 @@
-
 import { auth, db } from "@/services/firebase";
 import { AppUserProfile } from "@/types/user";
 import {
@@ -7,9 +6,14 @@ import {
   signOut,
   User,
 } from "firebase/auth";
-import { doc, onSnapshot } from "firebase/firestore";
-import { createContext, ReactNode, useContext, useEffect, useState } from "react";
-
+import { doc, onSnapshot, updateDoc } from "firebase/firestore";
+import {
+  createContext,
+  ReactNode,
+  useContext,
+  useEffect,
+  useState,
+} from "react";
 
 type AuthContextType = {
   user: User | null;
@@ -17,20 +21,21 @@ type AuthContextType = {
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  setActiveRole: (role: AppUserProfile["activeRole"]) => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<AppUserProfile | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let unsubProfile: (() => void) | null = null;
 
-    const unsubAuth = onAuthStateChanged(auth, async (u) => {
-      // Limpa listener anterior
+    const unsubAuth = onAuthStateChanged(auth, (u) => {
+      // limpa listener anterior
       if (unsubProfile) {
         unsubProfile();
         unsubProfile = null;
@@ -44,12 +49,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       setUser(u);
+      setLoading(true);
 
       const ref = doc(db, "users", u.uid);
 
-      // 🔁 Listener em tempo real do profile
       unsubProfile = onSnapshot(ref, (snap) => {
-        if (!snap.exists()) return;
+        if (!snap.exists()) {
+          setProfile(null);
+          setLoading(false);
+          return;
+        }
 
         setProfile({
           uid: u.uid,
@@ -74,8 +83,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await signOut(auth);
   }
 
+  async function setActiveRole(
+    role: AppUserProfile["activeRole"]
+  ) {
+    if (!profile) return;
+
+    await updateDoc(doc(db, "users", profile.uid), {
+      activeRole: role,
+    });
+  }
+
   return (
-    <AuthContext.Provider value={{ user, profile, loading, login, logout }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        profile,
+        loading,
+        login,
+        logout,
+        setActiveRole,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

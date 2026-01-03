@@ -1,67 +1,126 @@
 import {
-  addDoc,
   collection,
-  getDocs,
+  onSnapshot,
   query,
   where,
+  addDoc,
   updateDoc,
+  deleteDoc,
   doc,
 } from "firebase/firestore";
 import { db } from "./firebase";
-import type { Membership, MinistryRole } from "@/types/membership";
 
 /* =========================
-   LIST
+   TYPES
 ========================= */
 
-export async function listMembershipsByUser(
-  userId: string
-): Promise<Membership[]> {
+export type MembershipRole = "member" | "leader";
+
+export type Membership = {
+  id: string;
+  userId: string;
+  ministryId: string;
+  role: MembershipRole;
+  active: boolean;
+};
+
+/* =========================
+   LISTEN BY MINISTRY
+========================= */
+
+export function listenMembershipsByMinistry(
+  ministryId: string,
+  callback: (list: Membership[]) => void
+) {
   const q = query(
     collection(db, "memberships"),
-    where("userId", "==", userId),
+    where("ministryId", "==", ministryId),
     where("active", "==", true)
   );
 
-  const snap = await getDocs(q);
+  return onSnapshot(q, (snap) => {
+    const list: Membership[] = snap.docs.map((d) => ({
+      id: d.id,
+      ...(d.data() as Omit<Membership, "id">),
+    }));
 
-  return snap.docs.map((d) => ({
-    id: d.id,
-    ...(d.data() as Omit<Membership, "id">),
-  }));
+    callback(list);
+  });
 }
 
 /* =========================
-   CREATE
+   LISTEN ALL (ADMIN)
 ========================= */
 
-export async function addMembership(
+export function listenMemberships(
+  callback: (items: Membership[]) => void
+) {
+  const q = query(collection(db, "memberships"));
+
+  return onSnapshot(q, (snap) => {
+    const items: Membership[] = snap.docs.map((d) => ({
+      id: d.id,
+      ...(d.data() as Omit<Membership, "id">),
+    }));
+
+    callback(items);
+  });
+}
+
+/* =========================
+   LISTEN BY USER
+========================= */
+
+export function listenMembershipsByUser(
+  userId: string,
+  callback: (items: Membership[]) => void
+) {
+  const q = query(
+    collection(db, "memberships"),
+    where("userId", "==", userId)
+  );
+
+  return onSnapshot(q, (snap) => {
+    const items: Membership[] = snap.docs.map((d) => ({
+      id: d.id,
+      ...(d.data() as Omit<Membership, "id">),
+    }));
+
+    callback(items);
+  });
+}
+
+/* =========================
+   UPSERT
+========================= */
+
+export async function upsertMembership(
   userId: string,
   ministryId: string,
-  role: MinistryRole
+  role: MembershipRole
 ) {
   await addDoc(collection(db, "memberships"), {
     userId,
     ministryId,
     role,
-    active: true,
   });
 }
 
 /* =========================
-   UPDATE
+   UPDATE ROLE
 ========================= */
 
-export async function setMembershipRole(
-  id: string,
-  role: MinistryRole
+export async function updateMembershipRole(
+  membershipId: string,
+  role: MembershipRole
 ) {
-  await updateDoc(doc(db, "memberships", id), { role });
+  await updateDoc(doc(db, "memberships", membershipId), { role });
 }
 
-export async function setMembershipActive(
-  id: string,
-  active: boolean
-) {
-  await updateDoc(doc(db, "memberships", id), { active });
+/* =========================
+   REMOVE
+========================= */
+
+export async function removeMembership(membershipId: string) {
+  await deleteDoc(doc(db, "memberships", membershipId));
 }
