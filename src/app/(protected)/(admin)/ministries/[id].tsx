@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useEffect, useState } from "react";
+import { StyleSheet, Text, View, Pressable, Linking } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 
 import { AppScreen } from "@/components/layout/AppScreen";
@@ -10,7 +10,7 @@ import {
   listenMembershipsByMinistry,
   Membership,
 } from "@/services/memberships";
-import { getUserById, AppUser } from "@/services/users";
+import { getPersonById, Person } from "@/services/people";
 
 /* =========================
    TYPES
@@ -18,9 +18,10 @@ import { getUserById, AppUser } from "@/services/users";
 
 type MinistryMember = {
   membershipId: string;
-  userId: string;
+  personId: string;
   name: string;
   email: string;
+  whatsapp?: string;
   role: "member" | "leader";
 };
 
@@ -50,14 +51,15 @@ export default function AdminMinistryMembers() {
         const resolved: MinistryMember[] = [];
 
         for (const m of list) {
-          const user: AppUser | null = await getUserById(m.userId);
-          if (!user) continue;
+          const person: Person | null = await getPersonById(m.userId);
+          if (!person) continue;
 
           resolved.push({
             membershipId: m.id,
-            userId: user.id,
-            name: user.name,
-            email: user.email,
+            personId: person.id,
+            name: person.name,
+            email: person.email,
+            whatsapp: person.whatsapp,
             role: m.role,
           });
         }
@@ -73,12 +75,22 @@ export default function AdminMinistryMembers() {
   }, [id]);
 
   /* =========================
+     HELPERS
+  ========================= */
+
+  function openWhatsApp(phone?: string) {
+    if (!phone) return;
+    const clean = phone.replace(/\D/g, "");
+    Linking.openURL(`https://wa.me/${clean}`);
+  }
+
+  /* =========================
      RENDER
   ========================= */
 
   return (
     <AppScreen>
-      <AppHeader title="👥 Pessoas do ministério" />
+      <AppHeader title="👥 Pessoas do ministério" back/>
 
       <View style={styles.wrapper}>
         {loading && (
@@ -104,6 +116,7 @@ export default function AdminMinistryMembers() {
               },
             ]}
           >
+            {/* INFO */}
             <View style={{ flex: 1 }}>
               <Text
                 style={{
@@ -123,8 +136,23 @@ export default function AdminMinistryMembers() {
               >
                 {m.email}
               </Text>
+
+              {m.whatsapp && (
+                <Pressable onPress={() => openWhatsApp(m.whatsapp)}>
+                  <Text
+                    style={{
+                      color: theme.colors.primary,
+                      fontSize: 13,
+                      marginTop: 4,
+                    }}
+                  >
+                    📱 {m.whatsapp}
+                  </Text>
+                </Pressable>
+              )}
             </View>
 
+            {/* ROLE */}
             <View
               style={[
                 styles.roleBadge,

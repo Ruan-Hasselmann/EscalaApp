@@ -6,10 +6,7 @@ import { AppHeader } from "@/components/layout/AppHeader";
 import { useTheme } from "@/contexts/ThemeContext";
 
 import { listenUsers, AppUser, toggleUserActive } from "@/services/users";
-import {
-  listenMemberships,
-  Membership,
-} from "@/services/memberships";
+import { listenMemberships, Membership } from "@/services/memberships";
 import { listMinistries, Ministry } from "@/services/ministries";
 
 import { ManagePersonModal } from "./ManagePersonModal";
@@ -18,12 +15,17 @@ import { ManagePersonModal } from "./ManagePersonModal";
    TYPES
 ========================= */
 
+type PersonMinistry = {
+  name: string;
+  role: "leader" | "member";
+};
+
 type PersonRow = {
   id: string;
   name: string;
   email: string;
   active: boolean;
-  ministries: string[];
+  ministries: PersonMinistry[];
 };
 
 /* =========================
@@ -48,9 +50,7 @@ export default function AdminPeople() {
     const unsubMemberships = listenMemberships(setMemberships);
 
     listMinistries().then((m) =>
-      setMinistries(
-        m.sort((a, b) => a.name.localeCompare(b.name, "pt-BR"))
-      )
+      setMinistries(m.sort((a, b) => a.name.localeCompare(b.name, "pt-BR")))
     );
 
     return () => {
@@ -70,20 +70,27 @@ export default function AdminPeople() {
           (m) => m.userId === u.id
         );
 
-        const ministryNames = userMemberships
-          .map(
-            (m) =>
-              ministries.find((min) => min.id === m.ministryId)
-                ?.name
-          )
-          .filter(Boolean) as string[];
+        const ministryData: PersonMinistry[] = userMemberships
+          .map((m) => {
+            const ministry = ministries.find(
+              (min) => min.id === m.ministryId
+            );
+
+            if (!ministry) return null;
+
+            return {
+              name: ministry.name,
+              role: m.role,
+            };
+          })
+          .filter(Boolean) as PersonMinistry[];
 
         return {
           id: u.id,
           name: u.name,
           email: u.email,
           active: u.active,
-          ministries: ministryNames,
+          ministries: ministryData,
         };
       })
       .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
@@ -135,21 +142,47 @@ export default function AdminPeople() {
                   style={{
                     color: theme.colors.textMuted,
                     fontSize: 13,
+                    marginBottom: 4,
                   }}
                 >
                   {p.email}
                 </Text>
 
-                {p.ministries.length > 0 && (
+                {/* MINISTÉRIOS */}
+                {p.ministries.length === 0 ? (
                   <Text
                     style={{
-                      color: theme.colors.textMuted,
+                      color: theme.colors.danger,
                       fontSize: 12,
-                      marginTop: 4,
+                      marginTop: 2,
                     }}
                   >
-                    {p.ministries.join(", ")}
+                    ⚠️ Sem ministério
                   </Text>
+                ) : (
+                  p.ministries.map((m) => (
+                    <Text
+                      key={m.name}
+                      style={{
+                        color: theme.colors.textMuted,
+                        fontSize: 12,
+                        marginTop: 2,
+                      }}
+                    >
+                      {m.name} —{" "}
+                      <Text
+                        style={{
+                          color:
+                            m.role === "leader"
+                              ? theme.colors.primary
+                              : theme.colors.textMuted,
+                          fontWeight: m.role === "leader" ? "700" : "400",
+                        }}
+                      >
+                        {m.role === "leader" ? "Líder ⭐" : "Membro"}
+                      </Text>
+                    </Text>
+                  ))
                 )}
               </View>
 
@@ -187,7 +220,7 @@ export default function AdminPeople() {
                   style={[
                     styles.badge,
                     {
-                      padding: 10,
+                      paddingHorizontal: 14,
                       borderColor: theme.colors.border,
                     },
                   ]}
@@ -213,7 +246,7 @@ export default function AdminPeople() {
         visible={!!selectedUser}
         user={selectedUser}
         ministries={ministries}
-        memberships={memberships}   // ✅ OBRIGATÓRIO
+        memberships={memberships}
         onClose={() => setSelectedUser(null)}
       />
     </AppScreen>

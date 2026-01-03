@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import {
   Modal,
   Pressable,
@@ -43,12 +43,14 @@ export function ManagePersonModal({
 }: Props) {
   const { theme } = useTheme();
 
-  if (!user) return null;
-  const currentUser = user;
+  /* =========================
+     DERIVED DATA (HOOKS SEMPRE NO TOPO)
+  ========================= */
 
-  const userMemberships = memberships.filter(
-    (m) => m.userId === user.id
-  );
+  const userMemberships = useMemo(() => {
+    if (!user) return [];
+    return memberships.filter((m) => m.userId === user.id);
+  }, [user, memberships]);
 
   const membershipByMinistry = useMemo(() => {
     const map: Record<string, Membership> = {};
@@ -59,8 +61,17 @@ export function ManagePersonModal({
   }, [userMemberships]);
 
   /* =========================
+     GUARD (SÓ DEPOIS DOS HOOKS)
+  ========================= */
+
+  if (!visible || !user) {
+    return null;
+  }
+
+  /* =========================
      ACTIONS
   ========================= */
+  const currentUser = user;
 
   async function handleToggleActive() {
     await toggleUserActive(currentUser.id, !currentUser.active);
@@ -99,21 +110,11 @@ export function ManagePersonModal({
           ]}
         >
           {/* HEADER */}
-          <Text
-            style={[
-              styles.name,
-              { color: theme.colors.text },
-            ]}
-          >
+          <Text style={[styles.name, { color: theme.colors.text }]}>
             {user.name}
           </Text>
 
-          <Text
-            style={[
-              styles.email,
-              { color: theme.colors.textMuted },
-            ]}
-          >
+          <Text style={[styles.email, { color: theme.colors.textMuted }]}>
             {user.email}
           </Text>
 
@@ -143,12 +144,7 @@ export function ManagePersonModal({
           </Pressable>
 
           {/* MINISTRIES */}
-          <Text
-            style={[
-              styles.section,
-              { color: theme.colors.textMuted },
-            ]}
-          >
+          <Text style={[styles.section, { color: theme.colors.textMuted }]}>
             Ministérios
           </Text>
 
@@ -163,19 +159,12 @@ export function ManagePersonModal({
                   { borderColor: theme.colors.border },
                 ]}
               >
-                <Text
-                  style={{
-                    color: theme.colors.text,
-                    flex: 1,
-                  }}
-                >
+                <Text style={{ color: theme.colors.text, flex: 1 }}>
                   {min.name}
                 </Text>
 
                 {!m ? (
-                  <Pressable
-                    onPress={() => handleAdd(min.id)}
-                  >
+                  <Pressable onPress={() => handleAdd(min.id)}>
                     <Text
                       style={{
                         color: theme.colors.primary,
@@ -221,11 +210,7 @@ export function ManagePersonModal({
                       </Text>
                     </Pressable>
 
-                    <Pressable
-                      onPress={() =>
-                        handleRemove(min.id)
-                      }
-                    >
+                    <Pressable onPress={() => handleRemove(min.id)}>
                       <Text
                         style={{
                           color: theme.colors.danger,
@@ -246,16 +231,10 @@ export function ManagePersonModal({
             onPress={onClose}
             style={[
               styles.closeBtn,
-              {
-                borderColor: theme.colors.border,
-              },
+              { borderColor: theme.colors.border },
             ]}
           >
-            <Text
-              style={{
-                color: theme.colors.textMuted,
-              }}
-            >
+            <Text style={{ color: theme.colors.textMuted }}>
               Fechar
             </Text>
           </Pressable>

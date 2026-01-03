@@ -35,7 +35,6 @@ export function listenMembershipsByMinistry(
   const q = query(
     collection(db, "memberships"),
     where("ministryId", "==", ministryId),
-    where("active", "==", true)
   );
 
   return onSnapshot(q, (snap) => {
@@ -103,6 +102,7 @@ export async function upsertMembership(
     userId,
     ministryId,
     role,
+    active: true,
   });
 }
 

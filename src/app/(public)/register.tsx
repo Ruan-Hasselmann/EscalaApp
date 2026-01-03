@@ -7,11 +7,17 @@ import {
   View,
 } from "react-native";
 import { createUserWithEmailAndPassword } from "firebase/auth";
-import { doc, setDoc } from "firebase/firestore";
+import {
+  doc,
+  setDoc,
+  serverTimestamp,
+  deleteDoc,
+} from "firebase/firestore";
 import { auth, db } from "@/services/firebase";
 import { AppScreen } from "@/components/layout/AppScreen";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useRouter } from "expo-router";
 
 /* =========================
    HELPERS
@@ -39,6 +45,7 @@ function toE164(value: string) {
 
 export default function RegisterScreen() {
   const { theme } = useTheme();
+  const router = useRouter();
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -59,6 +66,7 @@ export default function RegisterScreen() {
     try {
       setLoading(true);
 
+      // 1️⃣ Auth
       const cred = await createUserWithEmailAndPassword(
         auth,
         email.trim(),
@@ -67,25 +75,37 @@ export default function RegisterScreen() {
 
       const uid = cred.user.uid;
 
-      // users
-      await setDoc(doc(db, "users", uid), {
-        uid,
-        name,
-        email,
-        roles: ["member"],
-        activeRole: "member",
-        active: true,
-      });
+      try {
+        // 2️⃣ users
+        await setDoc(doc(db, "users", uid), {
+          uid,
+          name,
+          email,
+          roles: ["member"],
+          activeRole: "member",
+          active: true,
+          createdAt: serverTimestamp(),
+        });
 
-      // people
-      await setDoc(doc(db, "people", uid), {
-        uid,
-        name,
-        whatsapp: phone,
-        active: true,
-        createdAt: Date.now(),
-      });
-    } catch (e: any) {
+        // 3️⃣ people
+        await setDoc(doc(db, "people", uid), {
+          uid,
+          name,
+          email,
+          whatsapp: phone,
+          active: true,
+          createdAt: serverTimestamp(),
+        });
+      } catch (firestoreError) {
+        // 🔥 rollback se falhar
+        await deleteDoc(doc(db, "users", uid)).catch(() => { });
+        throw firestoreError;
+      }
+
+      // 4️⃣ Redireciona (AuthContext assume depois)
+      router.replace("/(protected)/(member)/dashboard");
+    } catch (e) {
+      console.error(e);
       setError("Erro ao criar conta. Verifique os dados.");
     } finally {
       setLoading(false);
@@ -94,14 +114,26 @@ export default function RegisterScreen() {
 
   return (
     <AppScreen>
-      <AppHeader title="📝 Criar conta" />
-
       <View style={styles.wrapper}>
+        {/* HEADER */}
+        <Text style={[styles.title, { color: theme.colors.text }]}>
+          📝 Criar conta
+        </Text>
+
+        <Text
+          style={[styles.subtitle, { color: theme.colors.textMuted }]}
+        >
+          Crie sua conta para ter acessoa o sistema
+        </Text>
         <TextInput
           placeholder="Nome completo"
           value={name}
           onChangeText={setName}
-          style={[styles.input, { borderColor: theme.colors.border }]}
+          style={[
+            styles.input,
+            { borderColor: theme.colors.border, color: theme.colors.text },
+          ]}
+          placeholderTextColor={theme.colors.textMuted}
         />
 
         <TextInput
@@ -110,7 +142,11 @@ export default function RegisterScreen() {
           autoCapitalize="none"
           value={email}
           onChangeText={setEmail}
-          style={[styles.input, { borderColor: theme.colors.border }]}
+          style={[
+            styles.input,
+            { borderColor: theme.colors.border, color: theme.colors.text },
+          ]}
+          placeholderTextColor={theme.colors.textMuted}
         />
 
         <TextInput
@@ -118,7 +154,11 @@ export default function RegisterScreen() {
           keyboardType="phone-pad"
           value={whatsapp}
           onChangeText={(v) => setWhatsapp(formatWhatsapp(v))}
-          style={[styles.input, { borderColor: theme.colors.border }]}
+          style={[
+            styles.input,
+            { borderColor: theme.colors.border, color: theme.colors.text },
+          ]}
+          placeholderTextColor={theme.colors.textMuted}
         />
 
         <TextInput
@@ -126,7 +166,11 @@ export default function RegisterScreen() {
           secureTextEntry
           value={password}
           onChangeText={setPassword}
-          style={[styles.input, { borderColor: theme.colors.border }]}
+          style={[
+            styles.input,
+            { borderColor: theme.colors.border, color: theme.colors.text },
+          ]}
+          placeholderTextColor={theme.colors.textMuted}
         />
 
         {error && (
@@ -140,7 +184,10 @@ export default function RegisterScreen() {
           disabled={loading}
           style={[
             styles.button,
-            { backgroundColor: theme.colors.primary },
+            {
+              backgroundColor: theme.colors.primary,
+              opacity: loading ? 0.7 : 1,
+            },
           ]}
         >
           <Text style={{ color: theme.colors.primaryContrast }}>
@@ -175,5 +222,15 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: "center",
     marginTop: 8,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  subtitle: {
+    fontSize: 14,
+    textAlign: "center",
+    marginBottom: 24,
   },
 });

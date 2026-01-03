@@ -53,7 +53,7 @@ export function AppHeader({ title, back }: Props) {
     >
       {/* BACK */}
       {back ? (
-        <Pressable onPress={() => router.back()}>
+        <Pressable onPress={() => router.replace("/ministries/ministries")}>
           <Text style={{ color: theme.colors.text, fontSize: 18 }}>
             ◀
           </Text>

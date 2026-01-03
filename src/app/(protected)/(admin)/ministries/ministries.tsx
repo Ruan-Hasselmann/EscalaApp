@@ -7,7 +7,18 @@ import { AppHeader } from "@/components/layout/AppHeader";
 import { useTheme } from "@/contexts/ThemeContext";
 
 import { listenMinistries, Ministry } from "@/services/ministries";
+import { listenMemberships, Membership } from "@/services/memberships";
+
 import MinistryModal from "./MinistryModal";
+
+/* =========================
+   TYPES
+========================= */
+
+type MinistryRow = Ministry & {
+  membersCount: number;
+  leadersCount: number;
+};
 
 /* =========================
    SCREEN
@@ -18,26 +29,52 @@ export default function AdminMinistries() {
   const router = useRouter();
 
   const [ministries, setMinistries] = useState<Ministry[]>([]);
+  const [memberships, setMemberships] = useState<Membership[]>([]);
+
   const [selected, setSelected] = useState<Ministry | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
 
   /* =========================
-     SNAPSHOT (REALTIME)
+     SNAPSHOTS (REALTIME)
   ========================= */
 
   useEffect(() => {
-    return listenMinistries(setMinistries);
+    const unsubMinistries = listenMinistries(setMinistries);
+    const unsubMemberships = listenMemberships(setMemberships);
+
+    return () => {
+      unsubMinistries();
+      unsubMemberships();
+    };
   }, []);
 
   /* =========================
-     ORDER
+     JOIN + ORDER (CORRETO)
   ========================= */
 
-  const ordered = useMemo(() => {
-    return [...ministries].sort((a, b) =>
-      a.name.localeCompare(b.name, "pt-BR")
-    );
-  }, [ministries]);
+  const rows = useMemo<MinistryRow[]>(() => {
+    return ministries
+      .map((m) => {
+        const mMemberships = memberships.filter(
+          (mb) =>
+            mb.ministryId === m.id &&
+            mb.active === true
+        );
+
+        const leadersCount = mMemberships.filter(
+          (mb) => mb.role === "leader"
+        ).length;
+
+        const membersCount = mMemberships.length; // ✅ TOTAL
+
+        return {
+          ...m,
+          membersCount,
+          leadersCount,
+        };
+      })
+      .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+  }, [ministries, memberships]);
 
   /* =========================
      ACTIONS
@@ -63,7 +100,7 @@ export default function AdminMinistries() {
 
   return (
     <AppScreen>
-      <AppHeader title="🎧 Ministérios" />
+      <AppHeader title="🎧 Ministérios"/>
 
       <View style={styles.wrapper}>
         {/* NOVO */}
@@ -80,7 +117,7 @@ export default function AdminMinistries() {
         </Pressable>
 
         {/* LISTA */}
-        {ordered.map((m) => (
+        {rows.map((m) => (
           <Pressable
             key={m.id}
             onPress={() => openPeople(m)}
@@ -103,41 +140,6 @@ export default function AdminMinistries() {
               >
                 {m.name}
               </Text>
-
-              {m.active ? (
-                <View
-                  style={[
-                    styles.badge,
-                    { backgroundColor: theme.colors.success },
-                  ]}
-                >
-                  <Text
-                    style={{
-                      color: theme.colors.primaryContrast,
-                      fontSize: 12,
-                      fontWeight: "600",
-                    }}
-                  >
-                    Ativo
-                  </Text>
-                </View>
-              ) : (
-                <View
-                  style={[
-                    styles.badge,
-                    { backgroundColor: theme.colors.textMuted },
-                  ]}
-                >
-                  <Text
-                    style={{
-                      color: theme.colors.background,
-                      fontSize: 12,
-                    }}
-                  >
-                    Inativo
-                  </Text>
-                </View>
-              )}
             </View>
 
             {/* INFO */}
@@ -159,8 +161,7 @@ export default function AdminMinistries() {
                 fontSize: 13,
               }}
             >
-              👥 {m.membersCount ?? 0} membros · ⭐{" "}
-              {m.leadersCount ?? 0} líderes
+              👥 {m.membersCount} membros · ⭐ {m.leadersCount} líderes
             </Text>
 
             {/* ACTIONS */}
