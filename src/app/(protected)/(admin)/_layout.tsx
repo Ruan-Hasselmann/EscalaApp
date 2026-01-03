@@ -85,6 +85,18 @@ export default function AdminLayout() {
           href: null
         }}
       />
+      <Tabs.Screen
+        name="people/ManagePersonModal"
+        options={{
+          href: null
+        }}
+      />
+            <Tabs.Screen
+        name="service-days/ServiceDayModal"
+        options={{
+          href: null
+        }}
+      />
     </Tabs>
   );
 }

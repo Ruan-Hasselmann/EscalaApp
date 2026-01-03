@@ -51,6 +51,12 @@ export default function MemberLayout() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="modal/TurnSelectModal"
+        options={{
+          href: null
+        }}
+      />
     </Tabs>
   );
 }
