@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Modal,
   Pressable,
@@ -9,13 +9,19 @@ import {
 
 import { useTheme } from "@/contexts/ThemeContext";
 
-import { AppUser, toggleUserActive } from "@/services/users";
+import {
+  AppUser,
+  toggleAdminRole,
+  toggleUserActive,
+} from "@/services/users";
+
 import {
   Membership,
   upsertMembership,
   removeMembership,
   updateMembershipRole,
 } from "@/services/memberships";
+
 import { Ministry } from "@/services/ministries";
 
 /* =========================
@@ -43,8 +49,19 @@ export function ManagePersonModal({
 }: Props) {
   const { theme } = useTheme();
 
+  const [isAdminLocal, setIsAdminLocal] = useState(false);
+
   /* =========================
-     DERIVED DATA (HOOKS SEMPRE NO TOPO)
+     SYNC ADMIN STATE (HOOKS NO TOPO)
+  ========================= */
+
+  useEffect(() => {
+    if (!user || !visible) return;
+    setIsAdminLocal(user.roles.includes("admin"));
+  }, [user, visible]);
+
+  /* =========================
+     DERIVED DATA
   ========================= */
 
   const userMemberships = useMemo(() => {
@@ -61,7 +78,7 @@ export function ManagePersonModal({
   }, [userMemberships]);
 
   /* =========================
-     GUARD (SÓ DEPOIS DOS HOOKS)
+     GUARD (DEPOIS DOS HOOKS)
   ========================= */
 
   if (!visible || !user) {
@@ -71,10 +88,21 @@ export function ManagePersonModal({
   /* =========================
      ACTIONS
   ========================= */
+
   const currentUser = user;
 
   async function handleToggleActive() {
     await toggleUserActive(currentUser.id, !currentUser.active);
+  }
+
+  async function handleToggleAdmin() {
+    const nextIsAdmin = !isAdminLocal;
+
+    // optimistic UI
+    setIsAdminLocal(nextIsAdmin);
+
+    // Firestore recebe o estado ATUAL
+    await toggleAdminRole(currentUser.id, !nextIsAdmin);
   }
 
   async function handleAdd(ministryId: string) {
@@ -114,7 +142,9 @@ export function ManagePersonModal({
             {user.name}
           </Text>
 
-          <Text style={[styles.email, { color: theme.colors.textMuted }]}>
+          <Text
+            style={[styles.email, { color: theme.colors.textMuted }]}
+          >
             {user.email}
           </Text>
 
@@ -140,6 +170,37 @@ export function ManagePersonModal({
               }}
             >
               {user.active ? "Ativo" : "Inativo"}
+            </Text>
+          </Pressable>
+
+          {/* ADMIN ROLE */}
+          <Text style={[styles.section, { color: theme.colors.textMuted }]}>
+            Acesso Administrativo
+          </Text>
+
+          <Pressable
+            onPress={handleToggleAdmin}
+            style={[
+              styles.adminBtn,
+              {
+                backgroundColor: isAdminLocal
+                  ? theme.colors.primary
+                  : theme.colors.background,
+                borderColor: theme.colors.border,
+              },
+            ]}
+          >
+            <Text
+              style={{
+                color: isAdminLocal
+                  ? theme.colors.primaryContrast
+                  : theme.colors.text,
+                fontWeight: "600",
+              }}
+            >
+              {isAdminLocal
+                ? "Administrador ⭐"
+                : "Tornar administrador"}
             </Text>
           </Pressable>
 
@@ -273,6 +334,12 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 20,
     borderWidth: 1,
+  },
+  adminBtn: {
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: "center",
   },
   section: {
     marginTop: 8,

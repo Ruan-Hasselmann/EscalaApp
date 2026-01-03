@@ -6,6 +6,8 @@ import {
   orderBy,
   query,
   updateDoc,
+  arrayUnion,
+  arrayRemove,
 } from "firebase/firestore";
 import { db } from "./firebase";
 
@@ -13,11 +15,14 @@ import { db } from "./firebase";
    TYPES
 ========================= */
 
+export type UserRole = "admin" | "leader" | "member";
+
 export type AppUser = {
   id: string;
   name: string;
   email: string;
   active: boolean;
+  roles: UserRole[]; // ✅ fonte da verdade
 };
 
 /* =========================
@@ -33,13 +38,41 @@ export function listenUsers(
   );
 
   return onSnapshot(q, (snap) => {
-    const list: AppUser[] = snap.docs.map((d) => ({
-      id: d.id,
-      ...(d.data() as Omit<AppUser, "id">),
-    }));
+    const list: AppUser[] = snap.docs.map((d) => {
+      const data = d.data();
+
+      return {
+        id: d.id,
+        name: data.name,
+        email: data.email,
+        active: data.active ?? true,
+        roles: (data.roles ?? []) as UserRole[],
+      };
+    });
 
     callback(list);
   });
+}
+
+/* =========================
+   GET BY ID
+========================= */
+
+export async function getUserById(
+  id: string
+): Promise<AppUser | null> {
+  const snap = await getDoc(doc(db, "users", id));
+  if (!snap.exists()) return null;
+
+  const data = snap.data();
+
+  return {
+    id: snap.id,
+    name: data.name,
+    email: data.email,
+    active: data.active ?? true,
+    roles: (data.roles ?? []) as UserRole[],
+  };
 }
 
 /* =========================
@@ -53,23 +86,45 @@ export async function toggleUserActive(
   await updateDoc(doc(db, "users", userId), { active });
 }
 
-export async function getUserById(
-  id: string
-): Promise<AppUser | null> {
-  const snap = await getDoc(doc(db, "users", id));
-  if (!snap.exists()) return null;
+/* =========================
+   ROLES (GLOBAL)
+========================= */
 
-  return {
-    id: snap.id,
-    ...(snap.data() as Omit<AppUser, "id">),
-  };
-}
-
-export async function updateActiveRole(
+/**
+ * Adiciona um role ao usuário (ex: "admin")
+ * Usa arrayUnion para evitar duplicação
+ */
+export async function addUserRole(
   userId: string,
-  activeRole: "admin" | "leader" | "member"
+  role: UserRole
 ) {
   await updateDoc(doc(db, "users", userId), {
-    activeRole,
+    roles: arrayUnion(role),
+  });
+}
+
+/**
+ * Remove um role do usuário (ex: "admin")
+ */
+export async function removeUserRole(
+  userId: string,
+  role: UserRole
+) {
+  await updateDoc(doc(db, "users", userId), {
+    roles: arrayRemove(role),
+  });
+}
+
+/**
+ * Toggle específico para admin (caso mais comum)
+ */
+export async function toggleAdminRole(
+  userId: string,
+  isAdmin: boolean
+) {
+  await updateDoc(doc(db, "users", userId), {
+    roles: isAdmin
+      ? arrayRemove("admin")
+      : arrayUnion("admin"),
   });
 }
