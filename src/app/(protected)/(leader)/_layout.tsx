@@ -36,11 +36,20 @@ export default function LeaderLayout() {
       />
 
       <Tabs.Screen
-        name="schedules"
+        name="schedule/generate"
+        options={{
+          title: "Gerador",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="calendar" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="schedule/published"
         options={{
           title: "Escalas",
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="calendar" size={size} color={color} />
+            <Ionicons name="list" size={size} color={color} />
           ),
         }}
       />

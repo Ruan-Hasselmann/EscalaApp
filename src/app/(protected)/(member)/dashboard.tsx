@@ -7,11 +7,15 @@ import { ActionList } from "@/components/ui/ActionList";
 import { ActionListItem } from "@/components/ui/ActionListItem";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
+import { Ionicons } from "@expo/vector-icons";
 
 export default function MemberDashboard() {
   const { profile } = useAuth();
   const { theme } = useTheme();
   const router = useRouter();
+
+  const iconColor = theme.colors.primary;
+  const iconSize = 22;
 
   return (
     <AppScreen>
@@ -28,39 +32,16 @@ export default function MemberDashboard() {
 
       <ActionList>
         <ActionListItem
-          icon="📅"
-          title="Minhas escalas"
-          description="Veja quando você está escalado"
-          onPress={() =>
-            router.push("/(protected)/(member)/schedules")
+          icon={
+            <Ionicons
+              name="checkmark"
+              size={iconSize}
+              color={iconColor}
+            />
           }
-        />
-
-        <ActionListItem
-          icon="✅"
-          title="Confirmar presença"
-          description="Confirme ou recuse escalas futuras"
-          onPress={() =>
-            router.push("/(protected)/(member)/confirmations")
-          }
-        />
-
-        <ActionListItem
-          icon="⛪"
-          title="Próximos cultos"
-          description="Agenda dos próximos cultos"
-          onPress={() =>
-            router.push("/(protected)/(member)/calendar")
-          }
-        />
-
-        <ActionListItem
-          icon="👤"
-          title="Meu perfil"
-          description="Dados pessoais e preferências"
-          onPress={() =>
-            router.push("/(protected)/(member)/profile")
-          }
+          title="Disponibilidade"
+          description="Selecionar disponibilidade nos cultos"
+          onPress={() => router.push("/availability")}
         />
       </ActionList>
     </AppScreen>

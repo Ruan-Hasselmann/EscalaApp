@@ -7,11 +7,15 @@ import { ActionList } from "@/components/ui/ActionList";
 import { ActionListItem } from "@/components/ui/ActionListItem";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
+import { Ionicons } from "@expo/vector-icons";
 
 export default function LeaderDashboard() {
   const { profile } = useAuth();
   const { theme } = useTheme();
   const router = useRouter();
+
+  const iconColor = theme.colors.primary;
+  const iconSize = 22;
 
   return (
     <AppScreen>
@@ -28,30 +32,29 @@ export default function LeaderDashboard() {
 
       <ActionList>
         <ActionListItem
-          icon="📋"
+          icon={
+            <Ionicons
+              name="calendar"
+              size={iconSize}
+              color={iconColor}
+            />
+          }
+          title="Gerador"
+          description="Gerenciar escalas"
+          onPress={() => router.push("/schedule/generate")}
+        />
+
+        <ActionListItem
+          icon={
+            <Ionicons
+              name="list"
+              size={iconSize}
+              color={iconColor}
+            />
+          }
           title="Escalas"
-          description="Gerar e gerenciar escalas"
-          onPress={() =>
-            router.push("/(protected)/(leader)/schedules")
-          }
-        />
-
-        <ActionListItem
-          icon="👥"
-          title="Pessoas"
-          description="Gerenciar membros do ministério"
-          onPress={() =>
-            router.push("/(protected)/(leader)/people")
-          }
-        />
-
-        <ActionListItem
-          icon="📆"
-          title="Calendário"
-          description="Cultos e escalas do mês"
-          onPress={() =>
-            router.push("/(protected)/(leader)/calendar")
-          }
+          description="Escalas publicadas do ministerio"
+          onPress={() => router.push("/schedule/published")}
         />
       </ActionList>
     </AppScreen>

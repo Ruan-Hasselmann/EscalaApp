@@ -1,5 +1,6 @@
 import { Text, StyleSheet } from "react-native";
 import { useRouter } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 
 import { AppScreen } from "@/components/layout/AppScreen";
 import { AppHeader } from "@/components/layout/AppHeader";
@@ -13,6 +14,9 @@ export default function AdminDashboard() {
   const { profile } = useAuth();
   const { theme } = useTheme();
   const router = useRouter();
+
+  const iconColor = theme.colors.primary;
+  const iconSize = 22;
 
   return (
     <AppScreen>
@@ -29,47 +33,58 @@ export default function AdminDashboard() {
 
       <ActionList>
         <ActionListItem
-          icon="👥"
-          title="Usuários"
+          icon={
+            <Ionicons
+              name="checkmark"
+              size={iconSize}
+              color={iconColor}
+            />
+          }
+          title="Disponibilidade"
+          description="Janela de Disponibilidade"
+          onPress={() => router.push("/availability")}
+        />
+
+        <ActionListItem
+          icon={
+            <Ionicons
+              name="calendar"
+              size={iconSize}
+              color={iconColor}
+            />
+          }
+          title="Cultos"
+          description="Cadastrar cultos"
+          onPress={() => router.push("/service-days")}
+        />
+
+        <ActionListItem
+          icon={
+            <Ionicons
+              name="people"
+              size={iconSize}
+              color={iconColor}
+            />
+          }
+          title="Pessoas"
           description="Gerenciar membros, líderes e admins"
           onPress={() =>
-            router.push("/(protected)/(admin)/users")
+            router.push("/people")
           }
         />
 
         <ActionListItem
-          icon="🛠️"
+          icon={
+            <Ionicons
+              name="school"
+              size={iconSize}
+              color={iconColor}
+            />
+          }
           title="Ministérios"
           description="Criar e editar ministérios"
           onPress={() =>
-            router.push("/(protected)/(admin)/ministries")
-          }
-        />
-
-        <ActionListItem
-          icon="📅"
-          title="Escalas"
-          description="Visualizar e supervisionar escalas"
-          onPress={() =>
-            router.push("/(protected)/(admin)/schedules")
-          }
-        />
-
-        <ActionListItem
-          icon="📊"
-          title="Visão geral"
-          description="Indicadores e histórico"
-          onPress={() =>
-            router.push("/(protected)/(admin)/overview")
-          }
-        />
-
-        <ActionListItem
-          icon="⚙️"
-          title="Configurações"
-          description="Configurações globais do sistema"
-          onPress={() =>
-            router.push("/(protected)/(admin)/settings")
+            router.push("/ministries/ministries")
           }
         />
       </ActionList>

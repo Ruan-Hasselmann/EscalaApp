@@ -1,11 +1,12 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { ReactNode } from "react";
 import { useTheme } from "@/contexts/ThemeContext";
 
 type Props = {
   title: string;
   description?: string;
-  icon?: string;     // emoji por enquanto
-  right?: string;    // seta, badge, etc
+  icon?: ReactNode;   // ✅ agora aceita Ionicons, emoji, qualquer componente
+  right?: ReactNode;  // ✅ evoluído (seta, badge, ícone, etc.)
   onPress?: () => void;
 };
 
@@ -31,9 +32,20 @@ export function ActionListItem({
     >
       <View style={styles.left}>
         {icon && (
-          <Text style={[styles.icon, { color: theme.colors.primary }]}>
-            {icon}
-          </Text>
+          <View style={styles.icon}>
+            {typeof icon === "string" ? (
+              <Text
+                style={[
+                  styles.iconText,
+                  { color: theme.colors.primary },
+                ]}
+              >
+                {icon}
+              </Text>
+            ) : (
+              icon
+            )}
+          </View>
         )}
 
         <View style={{ flex: 1 }}>
@@ -59,14 +71,22 @@ export function ActionListItem({
         </View>
       </View>
 
-      <Text
-        style={[
-          styles.right,
-          { color: theme.colors.textMuted },
-        ]}
-      >
-        {right}
-      </Text>
+      {right && (
+        <View style={styles.right}>
+          {typeof right === "string" ? (
+            <Text
+              style={[
+                styles.rightText,
+                { color: theme.colors.textMuted },
+              ]}
+            >
+              {right}
+            </Text>
+          ) : (
+            right
+          )}
+        </View>
+      )}
     </Pressable>
   );
 }
@@ -86,6 +106,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   icon: {
+    width: 28,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  iconText: {
     fontSize: 20,
   },
   title: {
@@ -97,7 +122,11 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   right: {
-    fontSize: 20,
     marginLeft: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  rightText: {
+    fontSize: 20,
   },
 });

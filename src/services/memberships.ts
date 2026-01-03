@@ -30,20 +30,20 @@ export type Membership = {
 
 export function listenMembershipsByMinistry(
   ministryId: string,
-  callback: (list: Membership[]) => void
+  callback: (items: Membership[]) => void
 ) {
   const q = query(
     collection(db, "memberships"),
     where("ministryId", "==", ministryId),
+    where("active", "==", true)
   );
 
   return onSnapshot(q, (snap) => {
-    const list: Membership[] = snap.docs.map((d) => ({
+    const items = snap.docs.map((d) => ({
       id: d.id,
       ...(d.data() as Omit<Membership, "id">),
     }));
-
-    callback(list);
+    callback(items);
   });
 }
 
