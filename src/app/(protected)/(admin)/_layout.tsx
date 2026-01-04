@@ -19,48 +19,11 @@ export default function AdminLayout() {
       }}
     >
       <Tabs.Screen
-        name="index"
-        options={{
-          href: null
-        }}
-      />
-
-      <Tabs.Screen
         name="dashboard"
         options={{
           title: "Dashboard",
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="apps" size={size} color={color} />
-          ),
-        }}
-      />
-
-      <Tabs.Screen
-        name="availability"
-        options={{
-          title: "Disponibilidade",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="checkbox" size={size} color={color} />
-          ),
-        }}
-      />
-
-      <Tabs.Screen
-        name="service-days/index"
-        options={{
-          title: "Cultos",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="ribbon" size={size} color={color} />
-          ),
-        }}
-      />
-
-      <Tabs.Screen
-        name="people/index"
-        options={{
-          title: "Pessoas",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="people" size={size} color={color} />
+            <Ionicons name="apps-outline" size={size} color={color} />
           ),
         }}
       />
@@ -69,8 +32,41 @@ export default function AdminLayout() {
         options={{
           title: "Ministérios",
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="school" size={size} color={color} />
+            <Ionicons name="school-outline" size={size} color={color} />
           ),
+        }}
+      />
+      <Tabs.Screen
+        name="people/index"
+        options={{
+          title: "Pessoas",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="people-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="service-days/index"
+        options={{
+          title: "Cultos",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="ribbon-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="availability"
+        options={{
+          title: "Disponibilidade",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="time-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="index"
+        options={{
+          href: null
         }}
       />
       <Tabs.Screen
@@ -91,7 +87,7 @@ export default function AdminLayout() {
           href: null
         }}
       />
-            <Tabs.Screen
+      <Tabs.Screen
         name="service-days/ServiceDayModal"
         options={{
           href: null

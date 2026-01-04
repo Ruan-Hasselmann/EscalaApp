@@ -6,10 +6,11 @@ import {
   Text,
   TextInput,
   View,
+  ActivityIndicator,
 } from "react-native";
 import { useTheme } from "@/contexts/ThemeContext";
 import { Ministry } from "@/services/ministries";
-import { doc, setDoc, updateDoc } from "firebase/firestore";
+import { addDoc, collection, doc, updateDoc } from "firebase/firestore";
 import { db } from "@/services/firebase";
 
 type Props = {
@@ -27,32 +28,51 @@ export default function MinistryModal({
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  /* =========================
+     SYNC FORM
+  ========================= */
 
   useEffect(() => {
+    if (!visible) return;
+
     setName(ministry?.name ?? "");
     setDescription(ministry?.description ?? "");
   }, [ministry, visible]);
 
+  /* =========================
+     ACTION
+  ========================= */
+
   async function handleSave() {
-    if (!name.trim()) return;
+    if (!name.trim() || saving) return;
 
-    if (ministry) {
-      await updateDoc(doc(db, "ministries", ministry.id), {
-        name: name.trim(),
-        description: description.trim(),
-      });
-    } else {
-      await setDoc(doc(db, "ministries", name.toLowerCase()), {
-        name: name.trim(),
-        description: description.trim(),
-        active: true,
-        membersCount: 0,
-        leadersCount: 0,
-      });
+    try {
+      setSaving(true);
+
+      if (ministry) {
+        await updateDoc(doc(db, "ministries", ministry.id), {
+          name: name.trim(),
+          description: description.trim(),
+        });
+      } else {
+        await addDoc(collection(db, "ministries"), {
+          name: name.trim(),
+          description: description.trim(),
+          active: true,
+        });
+      }
+
+      onClose();
+    } finally {
+      setSaving(false);
     }
-
-    onClose();
   }
+
+  /* =========================
+     RENDER
+  ========================= */
 
   return (
     <Modal visible={visible} transparent animationType="slide">
@@ -63,14 +83,16 @@ export default function MinistryModal({
             { backgroundColor: theme.colors.surface },
           ]}
         >
+          {/* TITLE */}
           <Text style={[styles.title, { color: theme.colors.text }]}>
             {ministry ? "Editar ministério" : "Novo ministério"}
           </Text>
 
+          {/* NAME */}
           <TextInput
             value={name}
             onChangeText={setName}
-            placeholder="Nome"
+            placeholder="Nome do ministério"
             placeholderTextColor={theme.colors.textMuted}
             style={[
               styles.input,
@@ -81,10 +103,11 @@ export default function MinistryModal({
             ]}
           />
 
+          {/* DESCRIPTION */}
           <TextInput
             value={description}
             onChangeText={setDescription}
-            placeholder="Descrição"
+            placeholder="Descrição (opcional)"
             placeholderTextColor={theme.colors.textMuted}
             multiline
             style={[
@@ -92,14 +115,23 @@ export default function MinistryModal({
               {
                 borderColor: theme.colors.border,
                 color: theme.colors.text,
+                minHeight: 80,
               },
             ]}
           />
 
+          {/* ACTIONS */}
           <View style={styles.actions}>
             <Pressable
               onPress={onClose}
-              style={[styles.btn, { backgroundColor: theme.colors.background }]}
+              disabled={saving}
+              style={[
+                styles.btn,
+                {
+                  backgroundColor: theme.colors.background,
+                  opacity: saving ? 0.6 : 1,
+                },
+              ]}
             >
               <Text style={{ color: theme.colors.textMuted }}>
                 Cancelar
@@ -108,16 +140,29 @@ export default function MinistryModal({
 
             <Pressable
               onPress={handleSave}
-              style={[styles.btn, { backgroundColor: theme.colors.primary }]}
+              disabled={!name.trim() || saving}
+              style={[
+                styles.btn,
+                {
+                  backgroundColor: theme.colors.primary,
+                  opacity: !name.trim() || saving ? 0.6 : 1,
+                },
+              ]}
             >
-              <Text
-                style={{
-                  color: theme.colors.primaryContrast,
-                  fontWeight: "600",
-                }}
-              >
-                Salvar
-              </Text>
+              {saving ? (
+                <ActivityIndicator
+                  color={theme.colors.primaryContrast}
+                />
+              ) : (
+                <Text
+                  style={{
+                    color: theme.colors.primaryContrast,
+                    fontWeight: "600",
+                  }}
+                >
+                  Salvar
+                </Text>
+              )}
             </Pressable>
           </View>
         </View>
@@ -125,6 +170,10 @@ export default function MinistryModal({
     </Modal>
   );
 }
+
+/* =========================
+   STYLES
+========================= */
 
 const styles = StyleSheet.create({
   overlay: {

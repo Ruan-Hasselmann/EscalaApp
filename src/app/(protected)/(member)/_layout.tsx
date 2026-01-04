@@ -28,7 +28,7 @@ export default function MemberLayout() {
         options={{
           title: "Dashboard",
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="apps" size={size} color={color} />
+            <Ionicons name="apps-outline" size={size} color={color} />
           ),
         }}
       />
@@ -37,7 +37,7 @@ export default function MemberLayout() {
         options={{
           title: "Disponibilidade",
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="checkbox" size={size} color={color} />
+            <Ionicons name="time-outline" size={size} color={color} />
           ),
         }}
       />

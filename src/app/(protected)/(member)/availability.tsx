@@ -6,15 +6,18 @@ import { AppHeader } from "@/components/layout/AppHeader";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 
-import { listActiveServiceDaysByMonth, ServiceDay } from "@/services/serviceDays";
 import {
-    listenAvailabilityWindow,
-    AvailabilityWindow,
+  listActiveServiceDaysByMonth,
+  ServiceDay,
+} from "@/services/serviceDays";
+import {
+  listenAvailabilityWindow,
+  AvailabilityWindow,
 } from "@/services/availabilityWindow";
 import {
-    listenMemberAvailabilityByMonth,
-    MemberAvailabilityStatus,
-    toggleMemberAvailability,
+  listenMemberAvailabilityByMonth,
+  MemberAvailabilityStatus,
+  toggleMemberAvailability,
 } from "@/services/memberAvailability";
 
 import { TurnSelectModal } from "./modal/TurnSelectModal";
@@ -24,35 +27,44 @@ import { TurnSelectModal } from "./modal/TurnSelectModal";
 ========================= */
 
 function toDateKey(date: Date) {
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, "0");
-    const d = String(date.getDate()).padStart(2, "0");
-    return `${y}-${m}-${d}`;
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
 
 function isBetween(d: Date, start: Date, end: Date) {
-    return d >= start && d <= end;
+  return d >= start && d <= end;
 }
 
 function getMonthDaysGrid(year: number, month: number) {
-    const first = new Date(year, month, 1);
-    const last = new Date(year, month + 1, 0);
+  const first = new Date(year, month, 1);
+  const last = new Date(year, month + 1, 0);
 
-    const days: Date[] = [];
+  const days: Date[] = [];
 
-    for (let i = 0; i < first.getDay(); i++) {
-        days.push(new Date(NaN));
-    }
+  for (let i = 0; i < first.getDay(); i++) {
+    days.push(new Date(NaN));
+  }
 
-    for (let d = 1; d <= last.getDate(); d++) {
-        days.push(new Date(year, month, d));
-    }
+  for (let d = 1; d <= last.getDate(); d++) {
+    days.push(new Date(year, month, d));
+  }
 
-    while (days.length % 7 !== 0) {
-        days.push(new Date(NaN));
-    }
+  while (days.length % 7 !== 0) {
+    days.push(new Date(NaN));
+  }
 
-    return days;
+  return days;
+}
+
+function getTargetMonth() {
+  const now = new Date();
+  const d = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  return {
+    year: d.getFullYear(),
+    month: d.getMonth(),
+  };
 }
 
 /* =========================
@@ -60,352 +72,372 @@ function getMonthDaysGrid(year: number, month: number) {
 ========================= */
 
 export default function MemberAvailabilityScreen() {
-    const { user } = useAuth();
-    const { theme } = useTheme();
+  const { user } = useAuth();
+  const { theme } = useTheme();
 
-    const today = new Date();
-    const [year, setYear] = useState(today.getFullYear());
-    const [month, setMonth] = useState(today.getMonth());
+  /* =========================
+     TARGET MONTH (PRÓXIMO MÊS)
+  ========================= */
 
-    const weekDays = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+  const target = getTargetMonth();
+  const year = target.year;
+  const month = target.month;
 
-    const [windowData, setWindowData] = useState<AvailabilityWindow | null>(null);
-    const [serviceDays, setServiceDays] = useState<ServiceDay[]>([]);
-    const [statusMap, setStatusMap] = useState<
-        Record<string, MemberAvailabilityStatus>
-    >({});
-    const [loading, setLoading] = useState(true);
-    const [busyKey, setBusyKey] = useState<string | null>(null);
+  const weekDays = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 
-    const [turnModalOpen, setTurnModalOpen] = useState(false);
-    const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null);
+  const [windowData, setWindowData] =
+    useState<AvailabilityWindow | null>(null);
+  const [serviceDays, setServiceDays] = useState<ServiceDay[]>([]);
+  const [statusMap, setStatusMap] = useState<
+    Record<string, MemberAvailabilityStatus>
+  >({});
+  const [loading, setLoading] = useState(true);
+  const [busyKey, setBusyKey] = useState<string | null>(null);
 
-    /* =========================
-       LOAD AVAILABILITY WINDOW
-    ========================= */
+  const [turnModalOpen, setTurnModalOpen] = useState(false);
+  const [selectedDateKey, setSelectedDateKey] =
+    useState<string | null>(null);
 
-    useEffect(() => {
-        return listenAvailabilityWindow(setWindowData);
-    }, []);
+  /* =========================
+     LOAD AVAILABILITY WINDOW
+  ========================= */
 
-    function parseDateKeyStart(dateKey: string): Date {
-        const [y, m, d] = dateKey.split("-").map(Number);
-        return new Date(y, m - 1, d, 0, 0, 0, 0);
+  useEffect(() => {
+    return listenAvailabilityWindow(setWindowData);
+  }, []);
+
+  function parseDateKeyStart(dateKey: string): Date {
+    const [y, m, d] = dateKey.split("-").map(Number);
+    return new Date(y, m - 1, d, 0, 0, 0, 0);
+  }
+
+  function parseDateKeyEnd(dateKey: string): Date {
+    const [y, m, d] = dateKey.split("-").map(Number);
+    return new Date(y, m - 1, d, 23, 59, 59, 999);
+  }
+
+  const windowParsed = useMemo(() => {
+    if (!windowData) return null;
+
+    const start = parseDateKeyStart(windowData.startDate);
+    const end = parseDateKeyEnd(windowData.endDate);
+
+    function formatPtBr(date: Date) {
+      return date.toLocaleDateString("pt-BR", {
+        day: "2-digit",
+        month: "short",
+      });
     }
 
-    function parseDateKeyEnd(dateKey: string): Date {
-        const [y, m, d] = dateKey.split("-").map(Number);
-        return new Date(y, m - 1, d, 23, 59, 59, 999);
+    return {
+      open: windowData.open,
+      start,
+      end,
+      startLabel: formatPtBr(start),
+      endLabel: formatPtBr(end),
+    };
+  }, [windowData]);
+
+  /* =========================
+     LOAD SERVICE DAYS (TARGET)
+  ========================= */
+
+  useEffect(() => {
+    let alive = true;
+
+    async function load() {
+      setLoading(true);
+      try {
+        const days = await listActiveServiceDaysByMonth(year, month);
+        if (alive) setServiceDays(days);
+      } finally {
+        if (alive) setLoading(false);
+      }
     }
 
-    const windowParsed = useMemo(() => {
-        if (!windowData) return null;
+    load();
+    return () => {
+      alive = false;
+    };
+  }, [year, month]);
 
-        const start = parseDateKeyStart(windowData.startDate);
-        const end = parseDateKeyEnd(windowData.endDate);
+  const serviceDayMap = useMemo(() => {
+    const map: Record<string, ServiceDay> = {};
+    for (const d of serviceDays) {
+      map[d.dateKey] = d;
+    }
+    return map;
+  }, [serviceDays]);
 
-        function formatPtBr(date: Date) {
-            return date.toLocaleDateString("pt-BR", {
-                day: "2-digit",
-                month: "short",
-            });
+  /* =========================
+     LOAD MEMBER AVAILABILITY
+  ========================= */
+
+  useEffect(() => {
+    if (!user?.uid) return;
+
+    return listenMemberAvailabilityByMonth(
+      user.uid,
+      year,
+      month,
+      (items) => {
+        const next: Record<string, MemberAvailabilityStatus> = {};
+
+        for (const it of items) {
+          const key = `${it.dateKey}__${it.serviceId}`;
+          next[key] = it.status;
         }
 
-        return {
-            open: windowData.open,
-            start,
-            end,
-            startLabel: formatPtBr(start),
-            endLabel: formatPtBr(end),
-        };
-    }, [windowData]);
+        setStatusMap(next);
+      }
+    );
+  }, [user?.uid, year, month]);
 
-    /* =========================
-       LOAD SERVICE DAYS
-    ========================= */
+  /* =========================
+     CALENDAR DATA
+  ========================= */
 
-    useEffect(() => {
-        let alive = true;
+  const days = useMemo(
+    () => getMonthDaysGrid(year, month),
+    [year, month]
+  );
 
-        async function load() {
-            setLoading(true);
-            try {
-                const days = await listActiveServiceDaysByMonth(year, month);
-                if (alive) setServiceDays(days);
-            } finally {
-                if (alive) setLoading(false);
+  const monthLabel = useMemo(() => {
+    return new Date(year, month).toLocaleDateString("pt-BR", {
+      month: "long",
+      year: "numeric",
+    });
+  }, [year, month]);
+
+  /* =========================
+     RULES
+  ========================= */
+
+  function canSelect(day: Date) {
+    if (!windowParsed?.open) return false;
+    return isBetween(day, windowParsed.start, windowParsed.end);
+  }
+
+  /* =========================
+     ACTIONS
+  ========================= */
+
+  async function onSelectTurn(dateKey: string, serviceId: string) {
+    if (!user?.uid) return;
+
+    const key = `${dateKey}__${serviceId}`;
+    if (busyKey === key) return;
+
+    try {
+      setBusyKey(key);
+      const current = statusMap[key] ?? null;
+
+      await toggleMemberAvailability(
+        user.uid,
+        dateKey,
+        serviceId,
+        year,
+        month,
+        current
+      );
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function onDayPress(day: Date) {
+    if (!user?.uid) return;
+    if (isNaN(day.getTime())) return;
+
+    const dateKey = toDateKey(day);
+    const sd = serviceDayMap[dateKey];
+    if (!sd) return;
+
+    if (!windowParsed?.open) return;
+    if (!canSelect(day)) return;
+
+    const services = sd.services ?? [];
+
+    if (services.length === 1) {
+      await onSelectTurn(dateKey, services[0].id);
+      return;
+    }
+
+    setSelectedDateKey(dateKey);
+    setTurnModalOpen(true);
+  }
+
+  /* =========================
+     UI HELPERS
+  ========================= */
+
+  function legend() {
+    if (!windowParsed)
+      return "⚠️ Janela de disponibilidade não configurada.";
+    if (!windowParsed.open)
+      return "🔒 A janela de disponibilidade está fechada.";
+    return `🪟 Janela aberta para ${monthLabel}: ${windowParsed.startLabel} → ${windowParsed.endLabel}`;
+  }
+
+  /* =========================
+     RENDER
+  ========================= */
+
+  return (
+    <AppScreen>
+      <AppHeader title="🗓️ Minha disponibilidade" />
+
+      <View style={styles.wrapper}>
+        <Text style={[styles.sub, { color: theme.colors.textMuted }]}>
+          📅 Disponibilidade da próxima escala ({monthLabel})
+        </Text>
+
+        <Text style={[styles.sub, { color: theme.colors.textMuted }]}>
+          {legend()}
+        </Text>
+
+        {/* WEEKDAYS */}
+        <View style={styles.weekRow}>
+          {weekDays.map((w) => (
+            <Text
+              key={w}
+              style={[
+                styles.weekDay,
+                { color: theme.colors.textMuted },
+              ]}
+            >
+              {w}
+            </Text>
+          ))}
+        </View>
+
+        {/* GRID */}
+        <View style={styles.grid}>
+          {days.map((day, index) => {
+            const key = `${year}-${month}-${index}`;
+
+            if (isNaN(day.getTime())) {
+              return <View key={key} style={styles.day} />;
             }
-        }
 
-        load();
-        return () => {
-            alive = false;
-        };
-    }, [year, month]);
+            const dateKey = toDateKey(day);
+            const serviceDay = serviceDayMap[dateKey];
+            const hasService = !!serviceDay;
 
-    const serviceDayMap = useMemo(() => {
-        const map: Record<string, ServiceDay> = {};
-        for (const d of serviceDays) {
-            map[d.dateKey] = d;
-        }
-        return map;
-    }, [serviceDays]);
+            const selectable = hasService && canSelect(day);
 
-    /* =========================
-       LOAD MEMBER AVAILABILITY
-    ========================= */
-
-    useEffect(() => {
-        if (!user?.uid) return;
-
-        return listenMemberAvailabilityByMonth(user.uid, year, month, (items) => {
-            const next: Record<string, MemberAvailabilityStatus> = {};
-
-            for (const it of items) {
-                const key = `${it.dateKey}__${it.serviceId}`;
-                next[key] = it.status;
-            }
-
-            setStatusMap(next);
-        });
-    }, [user?.uid, year, month]);
-
-    /* =========================
-       CALENDAR DATA
-    ========================= */
-
-    const days = useMemo(() => getMonthDaysGrid(year, month), [year, month]);
-
-    const monthLabel = useMemo(() => {
-        return new Date(year, month).toLocaleDateString("pt-BR", {
-            month: "long",
-            year: "numeric",
-        });
-    }, [year, month]);
-
-    /* =========================
-       RULES
-    ========================= */
-
-    function changeMonth(delta: number) {
-        const d = new Date(year, month + delta);
-        setYear(d.getFullYear());
-        setMonth(d.getMonth());
-    }
-
-    function canSelect(day: Date) {
-        if (!windowParsed?.open) return false;
-        return isBetween(day, windowParsed.start, windowParsed.end);
-    }
-
-    /* =========================
-       ACTIONS
-    ========================= */
-
-    async function onSelectTurn(dateKey: string, serviceId: string) {
-        if (!user?.uid) return;
-
-        const key = `${dateKey}__${serviceId}`;
-        if (busyKey === key) return;
-
-        try {
-            setBusyKey(key);
-            const current = statusMap[key] ?? null;
-
-            await toggleMemberAvailability(
-                user.uid,
-                dateKey,
-                serviceId,
-                year,
-                month,
-                current
-            );
-        } finally {
-            setBusyKey(null);
-        }
-    }
-
-    async function onDayPress(day: Date) {
-        if (!user?.uid) return;
-        if (isNaN(day.getTime())) return;
-
-        const dateKey = toDateKey(day);
-        const sd = serviceDayMap[dateKey];
-        if (!sd) return;
-
-        if (!windowParsed?.open) return;
-        if (!canSelect(day)) return;
-
-        const services = sd.services ?? [];
-
-        if (services.length === 1) {
-            await onSelectTurn(dateKey, services[0].id);
-            return;
-        }
-
-        setSelectedDateKey(dateKey);
-        setTurnModalOpen(true);
-    }
-
-    /* =========================
-       UI HELPERS
-    ========================= */
-
-    function legend() {
-        if (!windowParsed) return "⚠️ Janela não configurada pelo admin.";
-        if (!windowParsed.open) return "🔒 Janela fechada — não é possível marcar.";
-        return `🪟 Janela aberta: ${windowParsed.startLabel} → ${windowParsed.endLabel}`;
-    }
-
-    /* =========================
-       RENDER
-    ========================= */
-
-    return (
-        <AppScreen>
-            <AppHeader title="🗓️ Minha disponibilidade" />
-
-            <View style={styles.wrapper}>
-                <Text style={[styles.sub, { color: theme.colors.textMuted }]}>
-                    {legend()}
+            return (
+              <Pressable
+                key={key}
+                disabled={!selectable}
+                onPress={() => onDayPress(day)}
+                style={[
+                  styles.day,
+                  {
+                    backgroundColor: hasService
+                      ? theme.colors.surface
+                      : "transparent",
+                    borderColor: hasService
+                      ? theme.colors.border
+                      : "transparent",
+                    opacity: selectable ? 1 : 0.4,
+                  },
+                ]}
+              >
+                <Text
+                  style={{
+                    color: theme.colors.text,
+                    fontWeight: "600",
+                  }}
+                >
+                  {day.getDate()}
                 </Text>
 
-                {/* MONTH HEADER */}
-                <View style={styles.monthRow}>
-                    <Pressable
-                        onPress={() => changeMonth(-1)}
-                        style={[styles.navBtn, { borderColor: theme.colors.border }]}
-                    >
-                        <Text style={{ color: theme.colors.text, fontSize: 20  }}>◀</Text>
-                    </Pressable>
+                {hasService && (
+                  <View style={styles.dots}>
+                    {serviceDay.services.map((s) => {
+                      const skey = `${dateKey}__${s.id}`;
+                      const status = statusMap[skey] ?? null;
 
-                    <Text
-                        style={{
-                            color: theme.colors.text,
-                            fontWeight: "600",
-                            fontSize: 20,
-                            textTransform: "capitalize",
-                        }}
-                    >
-                        {monthLabel}
-                    </Text>
+                      let color = theme.colors.textMuted;
+                      if (status === "available")
+                        color = theme.colors.success;
+                      if (status === "unavailable")
+                        color = theme.colors.danger;
 
-                    <Pressable
-                        onPress={() => changeMonth(1)}
-                        style={[styles.navBtn, { borderColor: theme.colors.border }]}
-                    >
-                        <Text style={{ color: theme.colors.text, fontSize: 20 }}>▶</Text>
-                    </Pressable>
-                </View>
-
-                {/* WEEKDAYS */}
-                <View style={styles.weekRow}>
-                    {weekDays.map((w) => (
-                        <Text
-                            key={w}
-                            style={[styles.weekDay, { color: theme.colors.textMuted }]}
-                        >
-                            {w}
-                        </Text>
-                    ))}
-                </View>
-
-                {/* GRID */}
-                <View style={styles.grid}>
-                    {days.map((day, index) => {
-                        const key = `${year}-${month}-${index}`;
-
-                        if (isNaN(day.getTime())) {
-                            return <View key={key} style={styles.day} />;
-                        }
-
-                        const dateKey = toDateKey(day);
-                        const serviceDay = serviceDayMap[dateKey];
-                        const hasService = !!serviceDay;
-
-                        const selectable = hasService && canSelect(day);
-
-                        return (
-                            <Pressable
-                                key={key}
-                                disabled={!selectable}
-                                onPress={() => onDayPress(day)}
-                                style={[
-                                    styles.day,
-                                    {
-                                        backgroundColor: hasService
-                                            ? theme.colors.surface
-                                            : "transparent",
-                                        borderColor: hasService
-                                            ? theme.colors.border
-                                            : "transparent",
-                                        opacity: selectable ? 1 : 0.4,
-                                    },
-                                ]}
-                            >
-                                <Text style={{ color: theme.colors.text, fontWeight: "600" }}>
-                                    {day.getDate()}
-                                </Text>
-
-                                {hasService && (
-                                    <View style={styles.dots}>
-                                        {serviceDay.services.map((s) => {
-                                            const skey = `${dateKey}__${s.id}`;
-                                            const status = statusMap[skey] ?? null;
-
-                                            let color = theme.colors.textMuted;
-                                            if (status === "available") color = theme.colors.success;
-                                            if (status === "unavailable") color = theme.colors.danger;
-
-                                            return (
-                                                <View
-                                                    key={skey}
-                                                    style={[styles.dot, { backgroundColor: color }]}
-                                                />
-                                            );
-                                        })}
-                                    </View>
-                                )}
-                            </Pressable>
-                        );
+                      return (
+                        <View
+                          key={skey}
+                          style={[
+                            styles.dot,
+                            { backgroundColor: color },
+                          ]}
+                        />
+                      );
                     })}
-                </View>
-
-                {/* HELP */}
-                <View style={[styles.helpCard, { borderColor: theme.colors.border }]}>
-                    <Text style={{ color: theme.colors.text, fontWeight: "700" }}>
-                        Como marcar
-                    </Text>
-                    <Text style={{ color: theme.colors.textMuted, marginTop: 6 }}>
-                        Toque no dia → selecione o culto → alterne disponibilidade.
-                    </Text>
-                </View>
-
-                {loading && (
-                    <Text style={{ color: theme.colors.textMuted, marginTop: 10 }}>
-                        ⏳ Carregando cultos do mês...
-                    </Text>
+                  </View>
                 )}
-            </View>
+              </Pressable>
+            );
+          })}
+        </View>
 
-            {/* MODAL */}
-            <TurnSelectModal
-                visible={turnModalOpen}
-                dateKey={selectedDateKey}
-                serviceDay={selectedDateKey ? serviceDayMap[selectedDateKey] : null}
-                statusMap={statusMap}
-                busyKey={busyKey}
-                onToggle={async (serviceId) => {
-                    if (!selectedDateKey) return;
-                    await onSelectTurn(selectedDateKey, serviceId);
-                }}
-                onClose={() => {
-                    setTurnModalOpen(false);
-                    setSelectedDateKey(null);
-                }}
-            />
-        </AppScreen>
-    );
+        {/* HELP */}
+        <View
+          style={[
+            styles.helpCard,
+            { borderColor: theme.colors.border },
+          ]}
+        >
+          <Text
+            style={{ color: theme.colors.text, fontWeight: "700" }}
+          >
+            Como marcar
+          </Text>
+          <Text
+            style={{
+              color: theme.colors.textMuted,
+              marginTop: 6,
+            }}
+          >
+            Toque no dia → selecione o culto → alterne disponibilidade.
+          </Text>
+        </View>
+
+        {loading && (
+          <Text
+            style={{
+              color: theme.colors.textMuted,
+              marginTop: 10,
+            }}
+          >
+            ⏳ Carregando cultos do mês...
+          </Text>
+        )}
+      </View>
+
+      {/* MODAL */}
+      <TurnSelectModal
+        visible={turnModalOpen}
+        dateKey={selectedDateKey}
+        serviceDay={
+          selectedDateKey
+            ? serviceDayMap[selectedDateKey]
+            : null
+        }
+        statusMap={statusMap}
+        busyKey={busyKey}
+        onToggle={async (serviceId) => {
+          if (!selectedDateKey) return;
+          await onSelectTurn(selectedDateKey, serviceId);
+        }}
+        onClose={() => {
+          setTurnModalOpen(false);
+          setSelectedDateKey(null);
+        }}
+      />
+    </AppScreen>
+  );
 }
 
 /* =========================
@@ -413,77 +445,61 @@ export default function MemberAvailabilityScreen() {
 ========================= */
 
 const styles = StyleSheet.create({
-    wrapper: {
-        width: "100%",
-        maxWidth: 420, // 🔑 igual AdminAvailability
-        alignSelf: "center",
-    },
+  wrapper: {
+    width: "100%",
+    maxWidth: 420,
+    alignSelf: "center",
+  },
 
-    sub: {
-        marginBottom: 16,
-        fontSize: 13,
-    },
+  sub: {
+    marginBottom: 12,
+    fontSize: 13,
+  },
 
-    monthRow: {
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "space-between",
-        marginBottom: 16,
-    },
+  weekRow: {
+    flexDirection: "row",
+    marginBottom: 6,
+  },
 
-    navBtn: {
-        borderWidth: 1,
-        borderRadius: 10,
-        paddingHorizontal: 14,
-        paddingVertical: 8,
-        minWidth: 48,
-        alignItems: "center",
-    },
+  weekDay: {
+    width: "14.2857%",
+    textAlign: "center",
+    fontSize: 12,
+    fontWeight: "600",
+  },
 
-    weekRow: {
-        flexDirection: "row",
-        marginBottom: 6,
-    },
+  grid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+  },
 
-    weekDay: {
-        width: "14.2857%",
-        textAlign: "center",
-        fontSize: 12,
-        fontWeight: "600",
-    },
+  day: {
+    width: "14.2857%",
+    aspectRatio: 1,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 6,
+  },
 
-    grid: {
-        flexDirection: "row",
-        flexWrap: "wrap",
-    },
+  dots: {
+    flexDirection: "row",
+    gap: 4,
+    marginTop: 6,
+  },
 
-    day: {
-        width: "14.2857%",
-        aspectRatio: 1,
-        borderRadius: 10,
-        borderWidth: 1,
-        alignItems: "center",
-        justifyContent: "center",
-        marginBottom: 6,
-    },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 99,
+    opacity: 0.9,
+  },
 
-    dots: {
-        flexDirection: "row",
-        gap: 4,
-        marginTop: 6,
-    },
-
-    dot: {
-        width: 6,
-        height: 6,
-        borderRadius: 99,
-        opacity: 0.9,
-    },
-
-    helpCard: {
-        marginTop: 16,
-        borderWidth: 1,
-        borderRadius: 14,
-        padding: 14,
-    },
+  helpCard: {
+    marginTop: 16,
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 14,
+  },
 });

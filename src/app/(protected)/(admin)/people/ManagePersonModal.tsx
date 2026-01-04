@@ -1,27 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
-import {
-  Modal,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useTheme } from "@/contexts/ThemeContext";
 
-import {
-  AppUser,
-  toggleAdminRole,
-  toggleUserActive,
-} from "@/services/users";
-
+import { AppUser, toggleAdminRole, toggleUserActive } from "@/services/users";
 import {
   Membership,
   upsertMembership,
   removeMembership,
   updateMembershipRole,
 } from "@/services/memberships";
-
 import { Ministry } from "@/services/ministries";
 
 /* =========================
@@ -50,15 +38,20 @@ export function ManagePersonModal({
   const { theme } = useTheme();
 
   const [isAdminLocal, setIsAdminLocal] = useState(false);
+  const [isActiveLocal, setIsActiveLocal] = useState(true);
+  const [saving, setSaving] = useState<null | "admin" | "active">(null);
 
   /* =========================
-     SYNC ADMIN STATE (HOOKS NO TOPO)
+     SYNC LOCAL STATES
   ========================= */
 
   useEffect(() => {
-    if (!user || !visible) return;
-    setIsAdminLocal(user.roles.includes("admin"));
-  }, [user, visible]);
+    if (!visible || !user) return;
+
+    setIsAdminLocal(user.roles?.includes("admin") ?? false);
+    setIsActiveLocal(!!user.active);
+    setSaving(null);
+  }, [visible, user?.id]); // importante: trocar usuário reseta estado
 
   /* =========================
      DERIVED DATA
@@ -78,31 +71,56 @@ export function ManagePersonModal({
   }, [userMemberships]);
 
   /* =========================
-     GUARD (DEPOIS DOS HOOKS)
+     GUARD
   ========================= */
 
-  if (!visible || !user) {
-    return null;
-  }
+  if (!visible || !user) return null;
+
+  const currentUser = user;
 
   /* =========================
      ACTIONS
   ========================= */
 
-  const currentUser = user;
-
   async function handleToggleActive() {
-    await toggleUserActive(currentUser.id, !currentUser.active);
+    if (saving) return;
+
+    const next = !isActiveLocal;
+
+    // optimistic UI
+    setIsActiveLocal(next);
+    setSaving("active");
+
+    try {
+      await toggleUserActive(currentUser.id, next);
+    } catch (e) {
+      // rollback se falhar
+      setIsActiveLocal(!next);
+      throw e;
+    } finally {
+      setSaving(null);
+    }
   }
 
   async function handleToggleAdmin() {
-    const nextIsAdmin = !isAdminLocal;
+    if (saving) return;
+
+    const next = !isAdminLocal;
 
     // optimistic UI
-    setIsAdminLocal(nextIsAdmin);
+    setIsAdminLocal(next);
+    setSaving("admin");
 
-    // Firestore recebe o estado ATUAL
-    await toggleAdminRole(currentUser.id, !nextIsAdmin);
+    try {
+      // ✅ aqui é NEXT, não o inverso
+      await toggleAdminRole(currentUser.id, next);
+    } catch (e) {
+      // rollback se falhar
+      setIsAdminLocal(!next);
+      throw e;
+    } finally {
+      setSaving(null);
+    }
   }
 
   async function handleAdd(ministryId: string) {
@@ -115,10 +133,7 @@ export function ManagePersonModal({
     await removeMembership(m.id);
   }
 
-  async function handleChangeRole(
-    ministryId: string,
-    role: "member" | "leader"
-  ) {
+  async function handleChangeRole(ministryId: string, role: "member" | "leader") {
     const m = membershipByMinistry[ministryId];
     if (!m) return;
     await updateMembershipRole(m.id, role);
@@ -131,45 +146,40 @@ export function ManagePersonModal({
   return (
     <Modal visible={visible} transparent animationType="fade">
       <View style={styles.overlay}>
-        <View
-          style={[
-            styles.modal,
-            { backgroundColor: theme.colors.surface },
-          ]}
-        >
+        <View style={[styles.modal, { backgroundColor: theme.colors.surface }]}>
           {/* HEADER */}
           <Text style={[styles.name, { color: theme.colors.text }]}>
-            {user.name}
+            {currentUser.name}
           </Text>
 
-          <Text
-            style={[styles.email, { color: theme.colors.textMuted }]}
-          >
-            {user.email}
+          <Text style={[styles.email, { color: theme.colors.textMuted }]}>
+            {currentUser.email}
           </Text>
 
           {/* ACTIVE */}
           <Pressable
             onPress={handleToggleActive}
+            disabled={saving === "active"}
             style={[
               styles.activeBtn,
               {
-                backgroundColor: user.active
+                backgroundColor: isActiveLocal
                   ? theme.colors.success
                   : theme.colors.background,
                 borderColor: theme.colors.border,
+                opacity: saving === "active" ? 0.6 : 1,
               },
             ]}
           >
             <Text
               style={{
-                color: user.active
+                color: isActiveLocal
                   ? theme.colors.primaryContrast
                   : theme.colors.textMuted,
                 fontWeight: "600",
               }}
             >
-              {user.active ? "Ativo" : "Inativo"}
+              {isActiveLocal ? "Ativo" : "Inativo"}
             </Text>
           </Pressable>
 
@@ -180,6 +190,7 @@ export function ManagePersonModal({
 
           <Pressable
             onPress={handleToggleAdmin}
+            disabled={saving === "admin"}
             style={[
               styles.adminBtn,
               {
@@ -187,6 +198,7 @@ export function ManagePersonModal({
                   ? theme.colors.primary
                   : theme.colors.background,
                 borderColor: theme.colors.border,
+                opacity: saving === "admin" ? 0.6 : 1,
               },
             ]}
           >
@@ -198,9 +210,7 @@ export function ManagePersonModal({
                 fontWeight: "600",
               }}
             >
-              {isAdminLocal
-                ? "Administrador ⭐"
-                : "Tornar administrador"}
+              {isAdminLocal ? "Administrador ⭐" : "Tornar administrador"}
             </Text>
           </Pressable>
 
@@ -215,10 +225,7 @@ export function ManagePersonModal({
             return (
               <View
                 key={min.id}
-                style={[
-                  styles.row,
-                  { borderColor: theme.colors.border },
-                ]}
+                style={[styles.row, { borderColor: theme.colors.border }]}
               >
                 <Text style={{ color: theme.colors.text, flex: 1 }}>
                   {min.name}
@@ -241,9 +248,7 @@ export function ManagePersonModal({
                       onPress={() =>
                         handleChangeRole(
                           min.id,
-                          m.role === "leader"
-                            ? "member"
-                            : "leader"
+                          m.role === "leader" ? "member" : "leader"
                         )
                       }
                       style={[
@@ -265,9 +270,7 @@ export function ManagePersonModal({
                           fontWeight: "600",
                         }}
                       >
-                        {m.role === "leader"
-                          ? "Líder ⭐"
-                          : "Membro"}
+                        {m.role === "leader" ? "Líder ⭐" : "Membro"}
                       </Text>
                     </Pressable>
 
@@ -290,14 +293,9 @@ export function ManagePersonModal({
           {/* FOOTER */}
           <Pressable
             onPress={onClose}
-            style={[
-              styles.closeBtn,
-              { borderColor: theme.colors.border },
-            ]}
+            style={[styles.closeBtn, { borderColor: theme.colors.border }]}
           >
-            <Text style={{ color: theme.colors.textMuted }}>
-              Fechar
-            </Text>
+            <Text style={{ color: theme.colors.textMuted }}>Fechar</Text>
           </Pressable>
         </View>
       </View>

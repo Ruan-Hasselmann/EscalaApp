@@ -1,4 +1,11 @@
-import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  Modal,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  ScrollView,
+} from "react-native";
 import { useTheme } from "@/contexts/ThemeContext";
 
 /* =========================
@@ -15,7 +22,7 @@ type Props = {
   visible: boolean;
   ministryName: string;
   serviceLabel: string;
-  serviceDate: string;
+  serviceDate: string; // YYYY-MM-DD
 
   members: EditableMember[];
   selectedPersonId: string | null;
@@ -24,6 +31,26 @@ type Props = {
   onCancel: () => void;
   onSave: () => void;
 };
+
+/* =========================
+   HELPERS
+========================= */
+
+function firstNameSafe(name: string) {
+  if (!name) return "Membro";
+  return name.trim().split(" ")[0];
+}
+
+function formatDatePtBr(dateKey: string) {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+
+  return date.toLocaleDateString("pt-BR", {
+    weekday: "long",
+    day: "2-digit",
+    month: "long",
+  });
+}
 
 /* =========================
    COMPONENT
@@ -41,6 +68,12 @@ export function EditScheduleModal({
   onSave,
 }: Props) {
   const { theme } = useTheme();
+
+  if (!visible) return null;
+
+  const orderedMembers = [...members].sort((a, b) =>
+    a.name.localeCompare(b.name, "pt-BR", { sensitivity: "base" })
+  );
 
   return (
     <Modal visible={visible} transparent animationType="fade">
@@ -66,47 +99,88 @@ export function EditScheduleModal({
               color: theme.colors.textMuted,
               fontSize: 13,
               marginBottom: 12,
+              textTransform: "capitalize",
             }}
           >
-            {serviceLabel} • {serviceDate}
+            {serviceLabel} • {formatDatePtBr(serviceDate)}
           </Text>
 
-          {/* MEMBERS */}
-          <View style={styles.chipRow}>
-            {members.map((m) => {
-              const active = m.id === selectedPersonId;
+          {/* LIST */}
+          {orderedMembers.length === 0 ? (
+            <Text
+              style={{
+                color: theme.colors.textMuted,
+                textAlign: "center",
+                marginVertical: 20,
+              }}
+            >
+              ⚠️ Nenhum membro disponível para este culto.
+            </Text>
+          ) : (
+            <ScrollView
+              style={{ maxHeight: 260 }}
+              showsVerticalScrollIndicator={false}
+            >
+              {orderedMembers.map((m) => {
+                const active = m.id === selectedPersonId;
 
-              return (
-                <Pressable
-                  key={m.id}
-                  onPress={() => onSelect(m.id)}
-                  style={[
-                    styles.chip,
-                    {
-                      backgroundColor: active
-                        ? theme.colors.primary
-                        : theme.colors.surface,
-                      borderColor: active
-                        ? theme.colors.primary
-                        : theme.colors.border,
-                    },
-                  ]}
-                >
-                  <Text
-                    style={{
-                      color: active
-                        ? theme.colors.primaryContrast
-                        : theme.colors.text,
-                      fontWeight: "600",
-                    }}
+                return (
+                  <Pressable
+                    key={m.id}
+                    onPress={() => onSelect(m.id)}
+                    style={[
+                      styles.row,
+                      {
+                        backgroundColor: active
+                          ? theme.colors.primary
+                          : theme.colors.background,
+                        borderColor: active
+                          ? theme.colors.primary
+                          : theme.colors.border,
+                      },
+                    ]}
                   >
-                    {m.name.split(" ")[0]}
-                    {m.status === "pending" ? " ⚠️" : ""}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={{
+                          color: active
+                            ? theme.colors.primaryContrast
+                            : theme.colors.text,
+                          fontWeight: "600",
+                        }}
+                      >
+                        {firstNameSafe(m.name)}
+                      </Text>
+
+                      <Text
+                        style={{
+                          color: active
+                            ? theme.colors.primaryContrast
+                            : theme.colors.textMuted,
+                          fontSize: 12,
+                        }}
+                      >
+                        {m.status === "confirmed"
+                          ? "Disponível"
+                          : "Disponibilidade pendente"}
+                      </Text>
+                    </View>
+
+                    {active && (
+                      <Text
+                        style={{
+                          color: theme.colors.primaryContrast,
+                          fontWeight: "700",
+                        }}
+                      >
+                        ✔
+                      </Text>
+                    )}
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          )}
 
           {/* ACTIONS */}
           <View style={styles.actions}>
@@ -133,7 +207,7 @@ export function EditScheduleModal({
                   fontWeight: "700",
                 }}
               >
-                Salvar
+                Salvar alteração
               </Text>
             </Pressable>
           </View>
@@ -165,17 +239,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
   },
-  chipRow: {
+  row: {
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginTop: 8,
-  },
-  chip: {
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 999,
+    alignItems: "center",
     borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 8,
+    gap: 12,
   },
   actions: {
     marginTop: 18,

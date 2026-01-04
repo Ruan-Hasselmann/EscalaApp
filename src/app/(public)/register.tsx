@@ -5,6 +5,10 @@ import {
   Text,
   TextInput,
   View,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
 } from "react-native";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import {
@@ -15,7 +19,6 @@ import {
 } from "firebase/firestore";
 import { auth, db } from "@/services/firebase";
 import { AppScreen } from "@/components/layout/AppScreen";
-import { AppHeader } from "@/components/layout/AppHeader";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useRouter } from "expo-router";
 
@@ -39,6 +42,10 @@ function toE164(value: string) {
   return `+55${digits}`;
 }
 
+function isValidEmail(email: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
 /* =========================
    SCREEN
 ========================= */
@@ -51,11 +58,34 @@ export default function RegisterScreen() {
   const [email, setEmail] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function handleRegister() {
+    if (loading) return;
+
     setError(null);
+
+    if (!name || !email || !password || !confirmPassword) {
+      setError("Preencha todos os campos.");
+      return;
+    }
+
+    if (!isValidEmail(email)) {
+      setError("Email inválido.");
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setError("As senhas não coincidem.");
+      return;
+    }
+
+    if (password.length < 6) {
+      setError("A senha deve ter pelo menos 6 caracteres.");
+      return;
+    }
 
     const phone = toE164(whatsapp);
     if (!phone) {
@@ -82,7 +112,6 @@ export default function RegisterScreen() {
           name,
           email,
           roles: ["member"],
-          activeRole: "member",
           active: true,
           createdAt: serverTimestamp(),
         });
@@ -98,11 +127,11 @@ export default function RegisterScreen() {
         });
       } catch (firestoreError) {
         // 🔥 rollback se falhar
-        await deleteDoc(doc(db, "users", uid)).catch(() => { });
+        await deleteDoc(doc(db, "users", uid)).catch(() => {});
         throw firestoreError;
       }
 
-      // 4️⃣ Redireciona (AuthContext assume depois)
+      // 4️⃣ Redireciona
       router.replace("/(protected)/(member)/dashboard");
     } catch (e) {
       console.error(e);
@@ -114,87 +143,136 @@ export default function RegisterScreen() {
 
   return (
     <AppScreen>
-      <View style={styles.wrapper}>
-        {/* HEADER */}
-        <Text style={[styles.title, { color: theme.colors.text }]}>
-          📝 Criar conta
-        </Text>
-
-        <Text
-          style={[styles.subtitle, { color: theme.colors.textMuted }]}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
         >
-          Crie sua conta para ter acessoa o sistema
-        </Text>
-        <TextInput
-          placeholder="Nome completo"
-          value={name}
-          onChangeText={setName}
-          style={[
-            styles.input,
-            { borderColor: theme.colors.border, color: theme.colors.text },
-          ]}
-          placeholderTextColor={theme.colors.textMuted}
-        />
+          <View style={styles.card}>
+            {/* HEADER */}
+            <Text style={[styles.title, { color: theme.colors.text }]}>
+              📝 Criar conta
+            </Text>
 
-        <TextInput
-          placeholder="Email"
-          keyboardType="email-address"
-          autoCapitalize="none"
-          value={email}
-          onChangeText={setEmail}
-          style={[
-            styles.input,
-            { borderColor: theme.colors.border, color: theme.colors.text },
-          ]}
-          placeholderTextColor={theme.colors.textMuted}
-        />
+            <Text
+              style={[
+                styles.subtitle,
+                { color: theme.colors.textMuted },
+              ]}
+            >
+              Crie sua conta para acessar o sistema
+            </Text>
 
-        <TextInput
-          placeholder="WhatsApp (DDD + número)"
-          keyboardType="phone-pad"
-          value={whatsapp}
-          onChangeText={(v) => setWhatsapp(formatWhatsapp(v))}
-          style={[
-            styles.input,
-            { borderColor: theme.colors.border, color: theme.colors.text },
-          ]}
-          placeholderTextColor={theme.colors.textMuted}
-        />
+            <TextInput
+              placeholder="Nome completo"
+              value={name}
+              onChangeText={setName}
+              editable={!loading}
+              style={[
+                styles.input,
+                { borderColor: theme.colors.border, color: theme.colors.text },
+              ]}
+              placeholderTextColor={theme.colors.textMuted}
+            />
 
-        <TextInput
-          placeholder="Senha"
-          secureTextEntry
-          value={password}
-          onChangeText={setPassword}
-          style={[
-            styles.input,
-            { borderColor: theme.colors.border, color: theme.colors.text },
-          ]}
-          placeholderTextColor={theme.colors.textMuted}
-        />
+            <TextInput
+              placeholder="Email"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              value={email}
+              onChangeText={setEmail}
+              editable={!loading}
+              returnKeyType="next"
+              style={[
+                styles.input,
+                { borderColor: theme.colors.border, color: theme.colors.text },
+              ]}
+              placeholderTextColor={theme.colors.textMuted}
+            />
 
-        {error && (
-          <Text style={{ color: theme.colors.danger, marginBottom: 8 }}>
-            {error}
-          </Text>
-        )}
+            <TextInput
+              placeholder="WhatsApp (DDD + número)"
+              keyboardType="phone-pad"
+              value={whatsapp}
+              onChangeText={(v) => setWhatsapp(formatWhatsapp(v))}
+              editable={!loading}
+              returnKeyType="next"
+              style={[
+                styles.input,
+                { borderColor: theme.colors.border, color: theme.colors.text },
+              ]}
+              placeholderTextColor={theme.colors.textMuted}
+            />
 
-        <Pressable
-          onPress={handleRegister}
-          disabled={loading}
-          style={[
-            styles.button,
-            {
-              backgroundColor: theme.colors.primary,
-              opacity: loading ? 0.7 : 1,
-            },
-          ]}
-        >
-          <Text style={{ color: theme.colors.primaryContrast }}>
-            {loading ? "Criando..." : "Criar conta"}
-          </Text>
-        </Pressable>
-      </View>
+            <TextInput
+              placeholder="Senha"
+              secureTextEntry
+              value={password}
+              onChangeText={setPassword}
+              editable={!loading}
+              returnKeyType="next"
+              style={[
+                styles.input,
+                { borderColor: theme.colors.border, color: theme.colors.text },
+              ]}
+              placeholderTextColor={theme.colors.textMuted}
+            />
+
+            <TextInput
+              placeholder="Repetir senha"
+              secureTextEntry
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              editable={!loading}
+              returnKeyType="done"
+              onSubmitEditing={handleRegister}
+              style={[
+                styles.input,
+                { borderColor: theme.colors.border, color: theme.colors.text },
+              ]}
+              placeholderTextColor={theme.colors.textMuted}
+            />
+
+            {error && (
+              <Text
+                style={[styles.error, { color: theme.colors.danger }]}
+              >
+                {error}
+              </Text>
+            )}
+
+            <Pressable
+              onPress={handleRegister}
+              disabled={loading}
+              style={[
+                styles.button,
+                {
+                  backgroundColor: theme.colors.primary,
+                  opacity: loading ? 0.7 : 1,
+                },
+              ]}
+            >
+              {loading ? (
+                <ActivityIndicator
+                  color={theme.colors.primaryContrast}
+                />
+              ) : (
+                <Text
+                  style={{
+                    color: theme.colors.primaryContrast,
+                    fontWeight: "600",
+                  }}
+                >
+                  Criar conta
+                </Text>
+              )}
+            </Pressable>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </AppScreen>
   );
 }
@@ -204,23 +282,28 @@ export default function RegisterScreen() {
 ========================= */
 
 const styles = StyleSheet.create({
-  wrapper: {
+  scroll: {
+    flexGrow: 1,
+    justifyContent: "center",
+    padding: 16,
+  },
+  card: {
     width: "100%",
     maxWidth: 420,
     alignSelf: "center",
-    paddingTop: 20,
+    gap: 12,
   },
   input: {
     borderWidth: 1,
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    marginBottom: 12,
   },
   button: {
-    paddingVertical: 14,
+    height: 48,
     borderRadius: 10,
     alignItems: "center",
+    justifyContent: "center",
     marginTop: 8,
   },
   title: {
@@ -232,5 +315,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: "center",
     marginBottom: 24,
+  },
+  error: {
+    fontSize: 14,
+    textAlign: "center",
+    marginBottom: 8,
   },
 });

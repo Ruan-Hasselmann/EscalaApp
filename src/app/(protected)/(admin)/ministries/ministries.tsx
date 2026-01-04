@@ -35,7 +35,7 @@ export default function AdminMinistries() {
   const [modalOpen, setModalOpen] = useState(false);
 
   /* =========================
-     SNAPSHOTS (REALTIME)
+     SNAPSHOTS
   ========================= */
 
   useEffect(() => {
@@ -49,28 +49,22 @@ export default function AdminMinistries() {
   }, []);
 
   /* =========================
-     JOIN + ORDER (CORRETO)
+     JOIN + ORDER
   ========================= */
 
   const rows = useMemo<MinistryRow[]>(() => {
     return ministries
       .map((m) => {
-        const mMemberships = memberships.filter(
-          (mb) =>
-            mb.ministryId === m.id &&
-            mb.active === true
+        const activeMemberships = memberships.filter(
+          (mb) => mb.ministryId === m.id && mb.active
         );
-
-        const leadersCount = mMemberships.filter(
-          (mb) => mb.role === "leader"
-        ).length;
-
-        const membersCount = mMemberships.length; // ✅ TOTAL
 
         return {
           ...m,
-          membersCount,
-          leadersCount,
+          membersCount: activeMemberships.length,
+          leadersCount: activeMemberships.filter(
+            (mb) => mb.role === "leader"
+          ).length,
         };
       })
       .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
@@ -100,7 +94,7 @@ export default function AdminMinistries() {
 
   return (
     <AppScreen>
-      <AppHeader title="🎧 Ministérios"/>
+      <AppHeader title="🎧 Ministérios" />
 
       <View style={styles.wrapper}>
         {/* NOVO */}
@@ -108,7 +102,10 @@ export default function AdminMinistries() {
           onPress={openNew}
           style={[
             styles.newBtn,
-            { backgroundColor: theme.colors.surface },
+            {
+              backgroundColor: theme.colors.surface,
+              borderColor: theme.colors.border,
+            },
           ]}
         >
           <Text style={{ color: theme.colors.text, fontWeight: "600" }}>
@@ -116,11 +113,23 @@ export default function AdminMinistries() {
           </Text>
         </Pressable>
 
+        {/* EMPTY STATE */}
+        {rows.length === 0 && (
+          <Text
+            style={{
+              textAlign: "center",
+              color: theme.colors.textMuted,
+              marginTop: 24,
+            }}
+          >
+            Nenhum ministério cadastrado ainda
+          </Text>
+        )}
+
         {/* LISTA */}
         {rows.map((m) => (
-          <Pressable
+          <View
             key={m.id}
-            onPress={() => openPeople(m)}
             style={[
               styles.card,
               {
@@ -129,8 +138,13 @@ export default function AdminMinistries() {
               },
             ]}
           >
-            {/* HEADER */}
-            <View style={styles.cardHeader}>
+            {/* CLICK AREA */}
+            <Pressable
+              onPress={() => openPeople(m)}
+              style={({ pressed }) => [
+                pressed && { opacity: 0.85 },
+              ]}
+            >
               <Text
                 style={{
                   color: theme.colors.text,
@@ -140,29 +154,28 @@ export default function AdminMinistries() {
               >
                 {m.name}
               </Text>
-            </View>
 
-            {/* INFO */}
-            {m.description ? (
+              {m.description ? (
+                <Text
+                  style={{
+                    color: theme.colors.textMuted,
+                    marginTop: 4,
+                  }}
+                >
+                  {m.description}
+                </Text>
+              ) : null}
+
               <Text
                 style={{
                   color: theme.colors.textMuted,
-                  marginTop: 4,
+                  marginTop: 8,
+                  fontSize: 13,
                 }}
               >
-                {m.description}
+                👥 {m.membersCount} membros · ⭐ {m.leadersCount} líderes
               </Text>
-            ) : null}
-
-            <Text
-              style={{
-                color: theme.colors.textMuted,
-                marginTop: 8,
-                fontSize: 13,
-              }}
-            >
-              👥 {m.membersCount} membros · ⭐ {m.leadersCount} líderes
-            </Text>
+            </Pressable>
 
             {/* ACTIONS */}
             <View style={styles.actions}>
@@ -176,10 +189,17 @@ export default function AdminMinistries() {
                   },
                 ]}
               >
-                <Text style={{ color: theme.colors.text }}>Editar</Text>
+                <Text
+                  style={{
+                    color: theme.colors.primary,
+                    fontWeight: "600",
+                  }}
+                >
+                  Editar
+                </Text>
               </Pressable>
             </View>
-          </Pressable>
+          </View>
         ))}
       </View>
 
@@ -212,6 +232,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: "center",
     marginBottom: 16,
+    borderWidth: 1,
   },
 
   card: {
@@ -219,18 +240,6 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 14,
     marginBottom: 12,
-  },
-
-  cardHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-
-  badge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
   },
 
   actions: {

@@ -7,6 +7,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+
 import { useTheme } from "@/contexts/ThemeContext";
 import {
   ServiceDay,
@@ -17,6 +18,10 @@ import {
   deleteServiceDay,
 } from "@/services/serviceDays";
 
+/* =========================
+   TYPES
+========================= */
+
 type Props = {
   visible: boolean;
   date: Date | null;
@@ -26,12 +31,28 @@ type Props = {
 
 const TURN_OPTIONS = ["Manhã", "Tarde", "Noite"] as const;
 
+/* =========================
+   HELPERS
+========================= */
+
 function toDateKey(date: Date) {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
 }
+
+function formatDatePtBr(date: Date) {
+  return date.toLocaleDateString("pt-BR", {
+    weekday: "long",
+    day: "2-digit",
+    month: "long",
+  });
+}
+
+/* =========================
+   COMPONENT
+========================= */
 
 export function ServiceDayModal({
   visible,
@@ -41,14 +62,27 @@ export function ServiceDayModal({
 }: Props) {
   const { theme } = useTheme();
 
-  const [turn, setTurn] = useState<(typeof TURN_OPTIONS)[number]>("Manhã");
-  const [type, setType] = useState<ServiceTurnType>("regular");
+  const [turn, setTurn] =
+    useState<(typeof TURN_OPTIONS)[number]>("Manhã");
+  const [type, setType] =
+    useState<ServiceTurnType>("regular");
   const [label, setLabel] = useState("");
 
+  const [busy, setBusy] = useState(false);
+  const [confirmRemoveDay, setConfirmRemoveDay] =
+    useState(false);
+  const [confirmRemoveService, setConfirmRemoveService] =
+    useState<string | null>(null);
+
   useEffect(() => {
-    setTurn("Manhã");
-    setType("regular");
-    setLabel("");
+    if (visible) {
+      setTurn("Manhã");
+      setType("regular");
+      setLabel("");
+      setBusy(false);
+      setConfirmRemoveDay(false);
+      setConfirmRemoveService(null);
+    }
   }, [visible]);
 
   if (!date) return null;
@@ -58,32 +92,67 @@ export function ServiceDayModal({
   const month = date.getMonth();
   const day = date.getDate();
 
+  /* =========================
+     ACTIONS
+  ========================= */
+
   async function addService() {
-    const service: ServiceTurn = {
-      id: `${turn}-${type}-${Date.now()}`,
-      label: type === "special" ? label || "Culto especial" : `Culto ${turn}`,
-      type,
-    };
+    if (busy) return;
+    if (type === "special" && !label.trim()) return;
 
-    await upsertServiceDay({
-      dateKey,
-      year,
-      month,
-      day,
-      service,
-    });
+    try {
+      setBusy(true);
 
-    setLabel("");
+      const service: ServiceTurn = {
+        id: `${turn}-${type}-${Date.now()}`,
+        label:
+          type === "special"
+            ? label.trim()
+            : `Culto ${turn}`,
+        type,
+      };
+
+      await upsertServiceDay({
+        dateKey,
+        year,
+        month,
+        day,
+        service,
+      });
+
+      setLabel("");
+    } finally {
+      setBusy(false);
+    }
   }
 
-  async function removeService(serviceId: string) {
-    await removeServiceFromDay(dateKey, serviceId);
+  async function handleRemoveService(serviceId: string) {
+    if (busy) return;
+
+    try {
+      setBusy(true);
+      await removeServiceFromDay(dateKey, serviceId);
+      setConfirmRemoveService(null);
+    } finally {
+      setBusy(false);
+    }
   }
 
-  async function removeDay() {
-    await deleteServiceDay(dateKey);
-    onClose();
+  async function handleRemoveDay() {
+    if (busy) return;
+
+    try {
+      setBusy(true);
+      await deleteServiceDay(dateKey);
+      onClose();
+    } finally {
+      setBusy(false);
+    }
   }
+
+  /* =========================
+     RENDER
+  ========================= */
 
   return (
     <Modal visible={visible} transparent animationType="slide">
@@ -96,18 +165,16 @@ export function ServiceDayModal({
         >
           {/* HEADER */}
           <Text
-            style={{
-              color: theme.colors.text,
-              fontSize: 18,
-              fontWeight: "600",
-              marginBottom: 12,
-            }}
+            style={[
+              styles.title,
+              { color: theme.colors.text },
+            ]}
           >
-            📅 {date.toLocaleDateString("pt-BR")}
+            📅 {formatDatePtBr(date)}
           </Text>
 
-          {/* TURNOS */}
-          <Text style={{ color: theme.colors.textMuted, marginBottom: 6 }}>
+          {/* TURNO */}
+          <Text style={{ color: theme.colors.textMuted, marginTop: 12 }}>
             Turno
           </Text>
 
@@ -146,32 +213,36 @@ export function ServiceDayModal({
           </Text>
 
           <View style={styles.row}>
-            {(["regular", "special"] as ServiceTurnType[]).map((t) => (
-              <Pressable
-                key={t}
-                onPress={() => setType(t)}
-                style={[
-                  styles.chip,
-                  {
-                    backgroundColor:
-                      type === t
-                        ? theme.colors.primary
-                        : theme.colors.background,
-                  },
-                ]}
-              >
-                <Text
-                  style={{
-                    color:
-                      type === t
-                        ? theme.colors.primaryContrast
-                        : theme.colors.text,
-                  }}
+            {(["regular", "special"] as ServiceTurnType[]).map(
+              (t) => (
+                <Pressable
+                  key={t}
+                  onPress={() => setType(t)}
+                  style={[
+                    styles.chip,
+                    {
+                      backgroundColor:
+                        type === t
+                          ? theme.colors.primary
+                          : theme.colors.background,
+                    },
+                  ]}
                 >
-                  {t === "regular" ? "Regular" : "Especial"}
-                </Text>
-              </Pressable>
-            ))}
+                  <Text
+                    style={{
+                      color:
+                        type === t
+                          ? theme.colors.primaryContrast
+                          : theme.colors.text,
+                    }}
+                  >
+                    {t === "regular"
+                      ? "Regular"
+                      : "Especial"}
+                  </Text>
+                </Pressable>
+              )
+            )}
           </View>
 
           {/* LABEL ESPECIAL */}
@@ -194,9 +265,22 @@ export function ServiceDayModal({
           {/* ADD */}
           <Pressable
             onPress={addService}
+            disabled={
+              busy ||
+              (type === "special" &&
+                !label.trim())
+            }
             style={[
               styles.button,
-              { backgroundColor: theme.colors.primary },
+              {
+                backgroundColor: theme.colors.primary,
+                opacity:
+                  busy ||
+                  (type === "special" &&
+                    !label.trim())
+                    ? 0.6
+                    : 1,
+              },
             ]}
           >
             <Text
@@ -211,7 +295,7 @@ export function ServiceDayModal({
 
           {/* LISTA */}
           {dayData?.services?.length ? (
-            <View style={{ marginTop: 16, gap: 8 }}>
+            <View style={styles.list}>
               {dayData.services.map((s) => (
                 <View
                   key={s.id}
@@ -220,12 +304,40 @@ export function ServiceDayModal({
                     { borderColor: theme.colors.border },
                   ]}
                 >
-                  <Text style={{ color: theme.colors.text }}>
-                    {s.label}
-                  </Text>
+                  <View>
+                    <Text
+                      style={{
+                        color: theme.colors.text,
+                        fontWeight: "600",
+                      }}
+                    >
+                      {s.label}
+                    </Text>
+                    <Text
+                      style={{
+                        fontSize: 12,
+                        color: theme.colors.textMuted,
+                      }}
+                    >
+                      {s.type === "special"
+                        ? "Culto especial"
+                        : "Culto regular"}
+                    </Text>
+                  </View>
 
-                  <Pressable onPress={() => removeService(s.id)}>
-                    <Text style={{ color: theme.colors.danger }}>✖</Text>
+                  <Pressable
+                    onPress={() =>
+                      setConfirmRemoveService(s.id)
+                    }
+                  >
+                    <Text
+                      style={{
+                        color: theme.colors.danger,
+                        fontSize: 16,
+                      }}
+                    >
+                      🗑
+                    </Text>
                   </Pressable>
                 </View>
               ))}
@@ -244,7 +356,7 @@ export function ServiceDayModal({
           {/* REMOVER DIA */}
           {dayData && (
             <Pressable
-              onPress={removeDay}
+              onPress={() => setConfirmRemoveDay(true)}
               style={[
                 styles.button,
                 {
@@ -271,7 +383,7 @@ export function ServiceDayModal({
               styles.button,
               {
                 backgroundColor: theme.colors.background,
-                marginTop: 16,
+                marginTop: 12,
               },
             ]}
           >
@@ -279,21 +391,73 @@ export function ServiceDayModal({
               Fechar
             </Text>
           </Pressable>
+
+          {/* CONFIRMAÇÕES */}
+          {confirmRemoveService && (
+            <Pressable
+              onPress={() =>
+                handleRemoveService(confirmRemoveService)
+              }
+              style={[
+                styles.confirm,
+                { backgroundColor: theme.colors.danger },
+              ]}
+            >
+              <Text
+                style={{
+                  color: theme.colors.primaryContrast,
+                  fontWeight: "600",
+                }}
+              >
+                Confirmar remoção do culto
+              </Text>
+            </Pressable>
+          )}
+
+          {confirmRemoveDay && (
+            <Pressable
+              onPress={handleRemoveDay}
+              style={[
+                styles.confirm,
+                { backgroundColor: theme.colors.danger },
+              ]}
+            >
+              <Text
+                style={{
+                  color: theme.colors.primaryContrast,
+                  fontWeight: "600",
+                }}
+              >
+                Confirmar remoção do dia inteiro
+              </Text>
+            </Pressable>
+          )}
         </View>
       </View>
     </Modal>
   );
 }
 
+/* =========================
+   STYLES
+========================= */
+
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.4)",
     justifyContent: "center",
+    padding: 16,
   },
   modal: {
-    padding: 16,
     borderRadius: 20,
+    padding: 16,
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: "700",
+    marginBottom: 12,
+    textTransform: "capitalize",
   },
   row: {
     flexDirection: "row",
@@ -318,12 +482,22 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: "center",
   },
+  list: {
+    marginTop: 16,
+    gap: 8,
+  },
   serviceRow: {
     borderWidth: 1,
-    borderRadius: 8,
+    borderRadius: 10,
     padding: 10,
     flexDirection: "row",
     justifyContent: "space-between",
+    alignItems: "center",
+  },
+  confirm: {
+    marginTop: 10,
+    paddingVertical: 10,
+    borderRadius: 10,
     alignItems: "center",
   },
 });

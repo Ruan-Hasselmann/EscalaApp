@@ -40,7 +40,7 @@ export default function LeaderLayout() {
         options={{
           title: "Gerador",
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="calendar" size={size} color={color} />
+            <Ionicons name="construct-outline" size={size} color={color} />
           ),
         }}
       />
@@ -49,7 +49,7 @@ export default function LeaderLayout() {
         options={{
           title: "Escalas",
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="list" size={size} color={color} />
+            <Ionicons name="documents-outline" size={size} color={color} />
           ),
         }}
       />

@@ -34,12 +34,12 @@ export default function LeaderDashboard() {
         <ActionListItem
           icon={
             <Ionicons
-              name="calendar"
+              name="construct-outline"
               size={iconSize}
               color={iconColor}
             />
           }
-          title="Gerador"
+          title="Gerar escala"
           description="Gerenciar escalas"
           onPress={() => router.push("/schedule/generate")}
         />
@@ -47,12 +47,12 @@ export default function LeaderDashboard() {
         <ActionListItem
           icon={
             <Ionicons
-              name="list"
+              name="documents-outline"
               size={iconSize}
               color={iconColor}
             />
           }
-          title="Escalas"
+          title="Escalas publicadas"
           description="Escalas publicadas do ministerio"
           onPress={() => router.push("/schedule/published")}
         />

@@ -43,35 +43,51 @@ export default function AdminMinistryMembers() {
   useEffect(() => {
     if (!id) return;
 
+    let cancelled = false;
     setLoading(true);
 
-    return listenMembershipsByMinistry(
+    const unsub = listenMembershipsByMinistry(
       id,
       async (list: Membership[]) => {
-        const resolved: MinistryMember[] = [];
+        try {
+          // 🔑 carrega pessoas em paralelo
+          const people = await Promise.all(
+            list.map((m) => getPersonById(m.userId))
+          );
 
-        for (const m of list) {
-          const person: Person | null = await getPersonById(m.userId);
-          if (!person) continue;
+          if (cancelled) return;
 
-          resolved.push({
-            membershipId: m.id,
-            personId: person.id,
-            name: person.name,
-            email: person.email,
-            whatsapp: person.whatsapp,
-            role: m.role,
-          });
+          const resolved: MinistryMember[] = list
+            .map((m, index) => {
+              const person = people[index];
+              if (!person) return null;
+
+              return {
+                membershipId: m.id,
+                personId: person.id,
+                name: person.name,
+                email: person.email,
+                whatsapp: person.whatsapp,
+                role: m.role,
+              };
+            })
+            .filter(Boolean) as MinistryMember[];
+
+          resolved.sort((a, b) =>
+            a.name.localeCompare(b.name, "pt-BR")
+          );
+
+          setMembers(resolved);
+        } finally {
+          if (!cancelled) setLoading(false);
         }
-
-        resolved.sort((a, b) =>
-          a.name.localeCompare(b.name, "pt-BR")
-        );
-
-        setMembers(resolved);
-        setLoading(false);
       }
     );
+
+    return () => {
+      cancelled = true;
+      unsub();
+    };
   }, [id]);
 
   /* =========================
@@ -80,7 +96,10 @@ export default function AdminMinistryMembers() {
 
   function openWhatsApp(phone?: string) {
     if (!phone) return;
+
     const clean = phone.replace(/\D/g, "");
+    if (!clean) return;
+
     Linking.openURL(`https://wa.me/${clean}`);
   }
 
@@ -90,7 +109,7 @@ export default function AdminMinistryMembers() {
 
   return (
     <AppScreen>
-      <AppHeader title="👥 Pessoas do ministério" back/>
+      <AppHeader title="👥 Pessoas do ministério" back />
 
       <View style={styles.wrapper}>
         {loading && (
@@ -175,7 +194,7 @@ export default function AdminMinistryMembers() {
                   fontWeight: "600",
                 }}
               >
-                {m.role === "leader" ? "Líder" : "Membro"}
+                {m.role === "leader" ? "Líder ⭐" : "Membro"}
               </Text>
             </View>
           </View>

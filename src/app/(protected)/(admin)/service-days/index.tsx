@@ -1,13 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+
 import { AppScreen } from "@/components/layout/AppScreen";
 import { AppHeader } from "@/components/layout/AppHeader";
+import { ConfirmActionModal } from "@/components/modals/ConfirmActionModal";
 import { useTheme } from "@/contexts/ThemeContext";
+
 import {
   copyServiceDaysFromPreviousMonthByOrder,
   listenServiceDaysByMonth,
   ServiceDay,
 } from "@/services/serviceDays";
+
 import { ServiceDayModal } from "./ServiceDayModal";
 
 /* =========================
@@ -15,6 +19,18 @@ import { ServiceDayModal } from "./ServiceDayModal";
 ========================= */
 
 const WEEK_DAYS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+const MAX_MONTH_OFFSET = 12;
+
+/* =========================
+   HELPERS
+========================= */
+
+function getDateKey(date: Date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
 
 /* =========================
    SCREEN
@@ -28,14 +44,23 @@ export default function AdminServiceDays() {
   const [month, setMonth] = useState(today.getMonth());
 
   const [days, setDays] = useState<ServiceDay[]>([]);
+  const [loading, setLoading] = useState(true);
+
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
+  const [confirmCopy, setConfirmCopy] = useState(false);
+  const [copying, setCopying] = useState(false);
+
   /* =========================
-     LISTENER FIRESTORE
+     LISTENER
   ========================= */
 
   useEffect(() => {
-    const unsub = listenServiceDaysByMonth(year, month, setDays);
+    setLoading(true);
+    const unsub = listenServiceDaysByMonth(year, month, (items) => {
+      setDays(items);
+      setLoading(false);
+    });
     return unsub;
   }, [year, month]);
 
@@ -59,18 +84,13 @@ export default function AdminServiceDays() {
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
 
-    const startWeekDay = firstDay.getDay();
-    const totalDays = lastDay.getDate();
-
     const cells: (Date | null)[] = [];
 
-    // espaços antes
-    for (let i = 0; i < startWeekDay; i++) {
+    for (let i = 0; i < firstDay.getDay(); i++) {
       cells.push(null);
     }
 
-    // dias do mês
-    for (let d = 1; d <= totalDays; d++) {
+    for (let d = 1; d <= lastDay.getDate(); d++) {
       cells.push(new Date(year, month, d));
     }
 
@@ -82,16 +102,17 @@ export default function AdminServiceDays() {
   ========================= */
 
   function changeMonth(delta: number) {
-    const d = new Date(year, month + delta, 1);
-    setYear(d.getFullYear());
-    setMonth(d.getMonth());
-  }
+    const base = new Date(today.getFullYear(), today.getMonth(), 1);
+    const target = new Date(year, month + delta, 1);
 
-  function getDateKey(date: Date) {
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, "0");
-    const d = String(date.getDate()).padStart(2, "0");
-    return `${y}-${m}-${d}`;
+    const diff =
+      (target.getFullYear() - base.getFullYear()) * 12 +
+      (target.getMonth() - base.getMonth());
+
+    if (Math.abs(diff) > MAX_MONTH_OFFSET) return;
+
+    setYear(target.getFullYear());
+    setMonth(target.getMonth());
   }
 
   /* =========================
@@ -103,7 +124,7 @@ export default function AdminServiceDays() {
       <AppHeader title="📅 Dias de Culto" />
 
       <View style={styles.calendarWrapper}>
-        {/* CONTROLE DE MÊS */}
+        {/* MÊS */}
         <View style={styles.monthRow}>
           <Pressable
             onPress={() => changeMonth(-1)}
@@ -112,7 +133,14 @@ export default function AdminServiceDays() {
             <Text style={{ color: theme.colors.text, fontSize: 20 }}>◀</Text>
           </Pressable>
 
-          <Text style={{ color: theme.colors.text, fontWeight: "600", fontSize: 20 }}>
+          <Text
+            style={{
+              color: theme.colors.text,
+              fontWeight: "600",
+              fontSize: 20,
+              textTransform: "capitalize",
+            }}
+          >
             {new Date(year, month).toLocaleDateString("pt-BR", {
               month: "long",
               year: "numeric",
@@ -127,7 +155,7 @@ export default function AdminServiceDays() {
           </Pressable>
         </View>
 
-        {/* DIAS DA SEMANA */}
+        {/* SEMANA */}
         <View style={styles.weekRow}>
           {WEEK_DAYS.map((d) => (
             <Text
@@ -139,79 +167,93 @@ export default function AdminServiceDays() {
           ))}
         </View>
 
-        {/* CALENDÁRIO */}
-        <View style={styles.grid}>
-          {calendar.map((date, index) => {
-            if (!date) {
-              return <View key={`empty-${index}`} style={styles.cell} />;
-            }
+        {/* GRID */}
+        {loading ? (
+          <Text
+            style={{
+              textAlign: "center",
+              marginTop: 20,
+              color: theme.colors.textMuted,
+            }}
+          >
+            ⏳ Carregando dias de culto...
+          </Text>
+        ) : (
+          <View style={styles.grid}>
+            {calendar.map((date, index) => {
+              if (!date) {
+                return <View key={`empty-${index}`} style={styles.cell} />;
+              }
 
-            const dateKey = getDateKey(date);
-            const dayData = daysMap[dateKey];
-            const hasServices = !!dayData?.services?.length;
+              const dateKey = getDateKey(date);
+              const dayData = daysMap[dateKey];
+              const count = dayData?.services?.length ?? 0;
 
-            return (
-              <Pressable
-                key={dateKey}
-                onPress={() => setSelectedDate(date)}
-                style={[
-                  styles.cell,
-                  {
-                    backgroundColor: hasServices
-                      ? theme.colors.primary
-                      : theme.colors.surface,
-                    borderColor: theme.colors.border,
-                  },
-                ]}
-              >
-                <Text
-                  style={{
-                    color: hasServices
-                      ? theme.colors.primaryContrast
-                      : theme.colors.text,
-                    fontWeight: "600",
-                  }}
+              const isSelected =
+                selectedDate &&
+                getDateKey(selectedDate) === dateKey;
+
+              let bg = theme.colors.surface;
+              if (count === 1) bg = theme.colors.primary;
+              if (count > 1) bg = theme.colors.secondary ?? theme.colors.primary;
+
+              return (
+                <Pressable
+                  key={dateKey}
+                  onPress={() => setSelectedDate(date)}
+                  style={[
+                    styles.cell,
+                    {
+                      backgroundColor: count > 0 ? bg : theme.colors.surface,
+                      borderColor: isSelected
+                        ? theme.colors.primary
+                        : theme.colors.border,
+                      borderWidth: isSelected ? 2 : 1,
+                    },
+                  ]}
                 >
-                  {date.getDate()}
-                </Text>
-
-                {hasServices && (
                   <Text
                     style={{
-                      fontSize: 12,
-                      color: theme.colors.primaryContrast,
-                      marginTop: 4,
+                      color:
+                        count > 0
+                          ? theme.colors.primaryContrast
+                          : theme.colors.text,
+                      fontWeight: "600",
                     }}
                   >
-                    {dayData.services.length} culto(s)
+                    {date.getDate()}
                   </Text>
-                )}
-              </Pressable>
-            );
-          })}
-        </View>
+
+                  {count > 0 && (
+                    <Text
+                      style={{
+                        fontSize: 10,
+                        color: theme.colors.primaryContrast,
+                        marginTop: 4,
+                      }}
+                    >
+                      {count} culto(s)
+                    </Text>
+                  )}
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
+
+        {/* COPIAR */}
         <Pressable
-          onPress={async () => {
-            await copyServiceDaysFromPreviousMonthByOrder(year, month);
-          }}
-          style={{
-            alignSelf: "flex-end",
-            marginBottom: 12,
-            paddingHorizontal: 14,
-            paddingVertical: 8,
-            borderRadius: 8,
-            backgroundColor: theme.colors.surface,
-            borderWidth: 1,
-            borderColor: theme.colors.border,
-          }}
+          onPress={() => setConfirmCopy(true)}
+          disabled={copying}
+          style={[styles.copyBtn, { borderColor: theme.colors.border }]}
         >
           <Text style={{ color: theme.colors.text, fontWeight: "500" }}>
-            📋 Copiar cultos por dia da semana
+            {copying ? "Copiando..." : "📋 Copiar cultos do mês anterior"}
           </Text>
         </Pressable>
       </View>
 
-      {/* MODAL */}
+      {/* MODAL DE DIA */}
       <ServiceDayModal
         visible={!!selectedDate}
         date={selectedDate}
@@ -222,6 +264,24 @@ export default function AdminServiceDays() {
         }
         onClose={() => setSelectedDate(null)}
       />
+
+      {/* CONFIRMAR CÓPIA */}
+      <ConfirmActionModal
+        visible={confirmCopy}
+        title="Copiar cultos"
+        description="Os cultos do mês anterior serão copiados para este mês. Deseja continuar?"
+        confirmLabel="Copiar"
+        onCancel={() => setConfirmCopy(false)}
+        onConfirm={async () => {
+          setConfirmCopy(false);
+          setCopying(true);
+          try {
+            await copyServiceDaysFromPreviousMonthByOrder(year, month);
+          } finally {
+            setCopying(false);
+          }
+        }}
+      />
     </AppScreen>
   );
 }
@@ -231,49 +291,50 @@ export default function AdminServiceDays() {
 ========================= */
 
 const styles = StyleSheet.create({
+  calendarWrapper: {
+    alignSelf: "center",
+    width: "100%",
+    maxWidth: 420,
+  },
   monthRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 16,
   },
-
   monthBtn: {
     borderWidth: 1,
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 8,
   },
-
-  calendarWrapper: {
-    alignSelf: "center",
-    width: "100%",
-    maxWidth: 420, // 🔑 igual AdminAvailability
-  },
-
   weekRow: {
     flexDirection: "row",
     marginBottom: 6,
   },
-
   weekDay: {
     flex: 1,
     textAlign: "center",
     fontSize: 12,
     fontWeight: "600",
   },
-
   grid: {
     flexDirection: "row",
     flexWrap: "wrap",
   },
-
   cell: {
     width: "14.2857%",
     aspectRatio: 1,
-    borderWidth: 1,
     borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
+  },
+  copyBtn: {
+    alignSelf: "flex-end",
+    marginTop: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
   },
 });

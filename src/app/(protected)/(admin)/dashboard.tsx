@@ -10,7 +10,6 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 
 export default function AdminDashboard() {
-  const { logout } = useAuth();
   const { profile } = useAuth();
   const { theme } = useTheme();
   const router = useRouter();
@@ -35,33 +34,21 @@ export default function AdminDashboard() {
         <ActionListItem
           icon={
             <Ionicons
-              name="checkmark"
+              name="school-outline"
               size={iconSize}
               color={iconColor}
             />
           }
-          title="Disponibilidade"
-          description="Janela de Disponibilidade"
-          onPress={() => router.push("/availability")}
-        />
-
-        <ActionListItem
-          icon={
-            <Ionicons
-              name="calendar"
-              size={iconSize}
-              color={iconColor}
-            />
+          title="Ministérios"
+          description="Criar e editar ministérios"
+          onPress={() =>
+            router.push("/ministries/ministries")
           }
-          title="Cultos"
-          description="Cadastrar cultos"
-          onPress={() => router.push("/service-days")}
         />
-
         <ActionListItem
           icon={
             <Ionicons
-              name="people"
+              name="people-outline"
               size={iconSize}
               color={iconColor}
             />
@@ -72,20 +59,29 @@ export default function AdminDashboard() {
             router.push("/people")
           }
         />
-
         <ActionListItem
           icon={
             <Ionicons
-              name="school"
+              name="calendar-outline"
               size={iconSize}
               color={iconColor}
             />
           }
-          title="Ministérios"
-          description="Criar e editar ministérios"
-          onPress={() =>
-            router.push("/ministries/ministries")
+          title="Cultos"
+          description="Cadastrar cultos"
+          onPress={() => router.push("/service-days")}
+        />
+        <ActionListItem
+          icon={
+            <Ionicons
+              name="time-outline"
+              size={iconSize}
+              color={iconColor}
+            />
           }
+          title="Disponibilidade"
+          description="Janela de Disponibilidade"
+          onPress={() => router.push("/availability")}
         />
       </ActionList>
     </AppScreen>

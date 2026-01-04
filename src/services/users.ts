@@ -120,11 +120,11 @@ export async function removeUserRole(
  */
 export async function toggleAdminRole(
   userId: string,
-  isAdmin: boolean
+  makeAdmin: boolean
 ) {
   await updateDoc(doc(db, "users", userId), {
-    roles: isAdmin
-      ? arrayRemove("admin")
-      : arrayUnion("admin"),
+    roles: makeAdmin
+      ? arrayUnion("admin")
+      : arrayRemove("admin"),
   });
 }

@@ -21,13 +21,11 @@ import {
 } from "@/services/memberships";
 
 import { generateAndSaveDraftSchedules } from "@/services/schedule/scheduleGenerator";
-
 import {
   listenSchedulesByMonth,
   Schedule,
   updateScheduleAssignment,
 } from "@/services/schedule/schedules";
-
 import {
   publishServiceSchedules,
   publishAllDraftSchedules,
@@ -62,21 +60,14 @@ function formatServiceDate(dateKey: string) {
   });
 }
 
-function translateFlag(type: string) {
-  switch (type) {
-    case "overload":
-      return "Pessoa acima do limite mensal";
-    case "conflict_ministry_priority":
-      return "Conflito com outro ministério";
-    case "fixed_person_conflict":
-      return "Conflito fixo entre pessoas";
-    default:
-      return type;
-  }
-}
-
 function firstName(name: string) {
   return name.trim().split(" ")[0];
+}
+
+function getNextMonth() {
+  const now = new Date();
+  const d = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  return { year: d.getFullYear(), month: d.getMonth() };
 }
 
 async function fetchMemberAvailabilityForUsersByMonth(
@@ -86,7 +77,6 @@ async function fetchMemberAvailabilityForUsersByMonth(
 ): Promise<MemberAvailability[]> {
   if (userIds.length === 0) return [];
 
-  // Firestore: where("in") aceita no máx 10 ids
   const chunks: string[][] = [];
   for (let i = 0; i < userIds.length; i += 10) {
     chunks.push(userIds.slice(i, i + 10));
@@ -123,24 +113,25 @@ export default function LeaderGenerateSchedule() {
   const { theme } = useTheme();
   const { profile } = useAuth();
 
+  const { year, month } = getNextMonth();
+
   const [ministries, setMinistries] = useState<Ministry[]>([]);
   const [users, setUsers] = useState<AppUser[]>([]);
   const [myMemberships, setMyMemberships] = useState<Membership[]>([]);
-  const [ministryMemberships, setMinistryMemberships] = useState<Membership[]>([]);
+  const [ministryMemberships, setMinistryMemberships] =
+    useState<Membership[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
 
-  // ✅ Disponibilidades (dos membros do ministério), carregadas somente quando abre o modal
-  const [availabilities, setAvailabilities] = useState<MemberAvailability[]>([]);
+  const [availabilities, setAvailabilities] =
+    useState<MemberAvailability[]>([]);
   const [loadingAvailability, setLoadingAvailability] = useState(false);
 
   const [generating, setGenerating] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
-  const [selectedSchedule, setSelectedSchedule] = useState<Schedule | null>(null);
-  const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
-
-  const today = new Date();
-  const year = today.getFullYear();
-  const month = today.getMonth();
+  const [selectedSchedule, setSelectedSchedule] =
+    useState<Schedule | null>(null);
+  const [selectedPersonId, setSelectedPersonId] =
+    useState<string | null>(null);
 
   /* =========================
      LOAD BASE DATA
@@ -149,21 +140,16 @@ export default function LeaderGenerateSchedule() {
   useEffect(() => {
     if (!profile?.uid) return;
 
-    const unsubMyMemberships = listenMembershipsByUser(
-      profile.uid,
-      setMyMemberships
-    );
-
-    const unsubSchedules = listenSchedulesByMonth(year, month, setSchedules);
-
-    const unsubUsers = listenUsers(setUsers);
+    const u1 = listenMembershipsByUser(profile.uid, setMyMemberships);
+    const u2 = listenSchedulesByMonth(year, month, setSchedules);
+    const u3 = listenUsers(setUsers);
 
     listMinistries().then(setMinistries);
 
     return () => {
-      unsubMyMemberships();
-      unsubSchedules();
-      unsubUsers();
+      u1();
+      u2();
+      u3();
     };
   }, [profile?.uid, year, month]);
 
@@ -174,17 +160,14 @@ export default function LeaderGenerateSchedule() {
   useEffect(() => {
     if (!selectedSchedule) return;
 
-    const unsub = listenMembershipsByMinistry(
+    return listenMembershipsByMinistry(
       selectedSchedule.ministryId,
       setMinistryMemberships
     );
-
-    return () => unsub();
   }, [selectedSchedule]);
 
   /* =========================
-     LOAD AVAILABILITY FOR MODAL
-     (somente quando o modal estiver aberto e já tivermos os memberships)
+     LOAD AVAILABILITY (MODAL)
   ========================= */
 
   useEffect(() => {
@@ -218,7 +201,6 @@ export default function LeaderGenerateSchedule() {
     }
 
     load();
-
     return () => {
       cancelled = true;
     };
@@ -249,7 +231,6 @@ export default function LeaderGenerateSchedule() {
   const availabilityMap = useMemo(() => {
     const map = new Map<string, MemberAvailabilityStatus>();
     for (const a of availabilities) {
-      // chave = userId__dateKey__serviceId
       map.set(`${a.userId}__${a.dateKey}__${a.serviceId}`, a.status);
     }
     return map;
@@ -261,7 +242,9 @@ export default function LeaderGenerateSchedule() {
 
   const draftSchedules = useMemo(() => {
     return schedules.filter(
-      (s) => s.status === "draft" && leaderMinistryIds.includes(s.ministryId)
+      (s) =>
+        s.status === "draft" &&
+        leaderMinistryIds.includes(s.ministryId)
     );
   }, [schedules, leaderMinistryIds]);
 
@@ -279,31 +262,24 @@ export default function LeaderGenerateSchedule() {
      MEMBERS FOR MODAL
   ========================= */
 
-  const assignedInThisService = useMemo(() => {
-    if (!selectedSchedule) return [];
-
-    const key = `${selectedSchedule.serviceDate}__${selectedSchedule.serviceId}`;
-
-    return schedules
-      .filter(
-        (s) =>
-          `${s.serviceDate}__${s.serviceId}` === key && s.status === "draft"
-      )
-      .flatMap((s) => s.assignments.map((a) => a.personId));
-  }, [selectedSchedule, schedules]);
-
   const membersDoMinisterio = useMemo(() => {
     if (!selectedSchedule) return [];
 
     return ministryMemberships
       .filter((m) => m.active)
       .filter((m) => {
-        // ❌ bloqueia quem já está escalado no culto
-        if (assignedInThisService.includes(m.userId)) return false;
+        const alreadyAssigned = schedules.some(
+          (s) =>
+            s.serviceDate === selectedSchedule.serviceDate &&
+            s.serviceId === selectedSchedule.serviceId &&
+            s.assignments.some((a) => a.personId === m.userId)
+        );
 
-        // 🚫 disponibilidade real (userId__dateKey__serviceId)
-        const key = `${m.userId}__${selectedSchedule.serviceDate}__${selectedSchedule.serviceId}`;
-        if (availabilityMap.get(key) === "unavailable") return false;
+        if (alreadyAssigned) return false;
+
+        const availabilityKey = `${m.userId}__${selectedSchedule.serviceDate}__${selectedSchedule.serviceId}`;
+        if (availabilityMap.get(availabilityKey) === "unavailable")
+          return false;
 
         return true;
       })
@@ -318,9 +294,9 @@ export default function LeaderGenerateSchedule() {
   }, [
     selectedSchedule,
     ministryMemberships,
-    userMap,
-    assignedInThisService,
+    schedules,
     availabilityMap,
+    userMap,
   ]);
 
   /* =========================
@@ -412,83 +388,94 @@ export default function LeaderGenerateSchedule() {
                 },
               ]}
             >
-              <Text
-                style={{
-                  color: theme.colors.text,
-                  fontWeight: "600",
-                  textTransform: "capitalize",
-                }}
-              >
-                {formatServiceDate(ref.serviceDate)} • {ref.serviceLabel}
-              </Text>
-
-              <Pressable
-                onPress={() =>
-                  publishServiceSchedules(
-                    ref.serviceDate,
-                    ref.serviceId,
-                    leaderMinistryIds
-                  )
-                }
-                style={styles.publishBtn}
-              >
+              <View style={styles.headerRow}>
                 <Text
                   style={{
-                    color: theme.colors.primary,
+                    color: theme.colors.text,
                     fontWeight: "600",
-                    fontSize: 13,
+                    flex: 1,
                   }}
                 >
-                  Publicar este culto
+                  {formatServiceDate(ref.serviceDate)} • {ref.serviceLabel}
                 </Text>
-              </Pressable>
 
-              {items.map((s) => (
                 <Pressable
-                  key={s.id}
-                  style={styles.assignment}
-                  onPress={() => {
-                    setSelectedSchedule(s);
-                    setSelectedPersonId(s.assignments[0]?.personId ?? null);
-                    setEditOpen(true);
-                  }}
+                  onPress={() =>
+                    publishServiceSchedules(
+                      ref.serviceDate,
+                      ref.serviceId,
+                      leaderMinistryIds
+                    )
+                  }
+                  style={[
+                    styles.editBtn,
+                    { borderColor: theme.colors.border },
+                  ]}
                 >
                   <Text
                     style={{
-                      color: theme.colors.textMuted,
+                      color: theme.colors.primary,
+                      fontWeight: "600",
                       fontSize: 13,
                     }}
                   >
-                    {ministryMap[s.ministryId]?.name}
+                    Publicar
                   </Text>
-
-                  {s.assignments.map((a) => (
-                    <Text
-                      key={a.personId}
-                      style={{
-                        color: theme.colors.text,
-                        fontSize: 14,
-                      }}
-                    >
-                      •{" "}
-                      {userMap[a.personId]
-                        ? firstName(userMap[a.personId].name)
-                        : a.personId}
-                    </Text>
-                  ))}
-
-                  {s.flags.length > 0 && (
-                    <Text
-                      style={{
-                        color: theme.colors.warning,
-                        fontSize: 12,
-                      }}
-                    >
-                      ⚠{" "}
-                      {s.flags.map((f) => translateFlag(f.type)).join(" · ")}
-                    </Text>
-                  )}
                 </Pressable>
+              </View>
+
+              {items.map((s) => (
+                <View key={s.id} style={styles.assignmentRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text
+                      style={{
+                        color: theme.colors.textMuted,
+                        fontSize: 13,
+                      }}
+                    >
+                      {ministryMap[s.ministryId]?.name}
+                    </Text>
+
+                    {s.assignments.map((a) => (
+                      <Text
+                        key={a.personId}
+                        style={{
+                          color: theme.colors.text,
+                          fontSize: 14,
+                        }}
+                      >
+                        •{" "}
+                        {userMap[a.personId]
+                          ? firstName(userMap[a.personId].name)
+                          : a.personId}
+                      </Text>
+                    ))}
+                  </View>
+
+                  <Pressable
+                    onPress={() => {
+                      setSelectedSchedule(s);
+                      setSelectedPersonId(
+                        s.assignments[0]?.personId ?? null
+                      );
+                      setEditOpen(true);
+                    }}
+                    style={[
+                      styles.editBtn,
+                      { borderColor: theme.colors.border },
+                    ]}
+                  >
+                    <Text
+                      style={{
+                        color: theme.colors.primary,
+                        fontWeight: "600",
+                        fontSize: 13,
+                      }}
+                    >
+                      Editar
+                    </Text>
+                  </Pressable>
+                </View>
               ))}
             </View>
           );
@@ -508,19 +495,20 @@ export default function LeaderGenerateSchedule() {
         onCancel={() => {
           setEditOpen(false);
           setSelectedSchedule(null);
-          setAvailabilities([]); // limpa para evitar “vazar” de um modal pro outro
+          setAvailabilities([]);
         }}
         onSave={async () => {
           if (!selectedSchedule || !selectedPersonId) return;
 
-          await updateScheduleAssignment(selectedSchedule.id, selectedPersonId);
+          await updateScheduleAssignment(
+            selectedSchedule.id,
+            selectedPersonId
+          );
 
           setEditOpen(false);
           setSelectedSchedule(null);
           setAvailabilities([]);
         }}
-        // se seu modal suportar, dá pra passar um loading state também:
-        // loading={loadingAvailability}
       />
     </AppScreen>
   );
@@ -549,7 +537,15 @@ const styles = StyleSheet.create({
     padding: 12,
     gap: 8,
   },
-  assignment: {
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  assignmentRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
     marginTop: 6,
   },
   publishAllBtn: {
@@ -558,9 +554,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: "center",
   },
-  publishBtn: {
-    marginTop: 6,
-    alignSelf: "flex-start",
+  editBtn: {
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 10,

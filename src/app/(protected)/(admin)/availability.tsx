@@ -52,6 +52,7 @@ function getMonthDays(year: number, month: number) {
 export default function AdminAvailability() {
   const { theme } = useTheme();
 
+  // 👉 foco automático no mês atual
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth());
@@ -68,6 +69,8 @@ export default function AdminAvailability() {
     start: Date | null;
     end: Date | null;
   }>({ start: null, end: null });
+
+  const [savedFeedback, setSavedFeedback] = useState(false);
 
   /* =========================
      LISTENER
@@ -111,6 +114,10 @@ export default function AdminAvailability() {
     });
   }, [year, month]);
 
+  const isPastMonth =
+    year < today.getFullYear() ||
+    (year === today.getFullYear() && month < today.getMonth());
+
   /* =========================
      ACTIONS
   ========================= */
@@ -119,9 +126,12 @@ export default function AdminAvailability() {
     const d = new Date(year, month + delta, 1);
     setYear(d.getFullYear());
     setMonth(d.getMonth());
+    setSelecting({ start: null, end: null });
   }
 
   function handleDayPress(day: Date) {
+    if (isPastMonth) return;
+
     if (!selecting.start || selecting.end) {
       setSelecting({ start: day, end: null });
       return;
@@ -137,27 +147,16 @@ export default function AdminAvailability() {
   async function saveWindow() {
     if (!selecting.start || !selecting.end) return;
 
-    const start = new Date(
-      selecting.start.getFullYear(),
-      selecting.start.getMonth(),
-      selecting.start.getDate(),
-      12, 0, 0
-    );
-
-    const end = new Date(
-      selecting.end.getFullYear(),
-      selecting.end.getMonth(),
-      selecting.end.getDate(),
-      12, 0, 0
-    );
-
     await setAvailabilityWindow({
-      startDate: toDateKey(start),
-      endDate: toDateKey(end),
+      startDate: toDateKey(selecting.start),
+      endDate: toDateKey(selecting.end),
       open: true,
     });
 
     setSelecting({ start: null, end: null });
+    setSavedFeedback(true);
+
+    setTimeout(() => setSavedFeedback(false), 2500);
   }
 
   function isSelected(day: Date) {
@@ -179,17 +178,35 @@ export default function AdminAvailability() {
     <AppScreen>
       <AppHeader title="🪟 Janela de Disponibilidade" />
 
-      <View style={styles.calendarWrapper}>
+      <View style={styles.wrapper}>
+        {/* INFO */}
+        <Text style={[styles.info, { color: theme.colors.textMuted }]}>
+          Os membros só poderão marcar disponibilidade dentro do período definido
+          abaixo.
+        </Text>
+
         {/* MÊS */}
         <View style={styles.monthRow}>
           <Pressable
             onPress={() => changeMonth(-1)}
-            style={[styles.monthBtn, { borderColor: theme.colors.border }]}
+            disabled={isPastMonth}
+            style={[
+              styles.monthBtn,
+              { borderColor: theme.colors.border },
+              isPastMonth && { opacity: 0.3 },
+            ]}
           >
             <Text style={{ color: theme.colors.text, fontSize: 20 }}>◀</Text>
           </Pressable>
 
-          <Text style={{ color: theme.colors.text, fontWeight: "600", fontSize: 20 }}>
+          <Text
+            style={{
+              color: theme.colors.text,
+              fontWeight: "600",
+              fontSize: 20,
+              textTransform: "capitalize",
+            }}
+          >
             {monthLabel}
           </Text>
 
@@ -199,6 +216,12 @@ export default function AdminAvailability() {
           >
             <Text style={{ color: theme.colors.text, fontSize: 20 }}>▶</Text>
           </Pressable>
+        </View>
+
+        {/* LEGENDA */}
+        <View style={styles.legendRow}>
+          <Text style={{ color: theme.colors.success }}>🟢 Janela ativa</Text>
+          <Text style={{ color: theme.colors.primary }}>🔵 Nova seleção</Text>
         </View>
 
         {/* SEMANA */}
@@ -216,9 +239,7 @@ export default function AdminAvailability() {
         {/* GRID */}
         <View style={styles.grid}>
           {days.map((day, index) => {
-            if (!day) {
-              return <View key={`empty-${index}`} style={styles.day} />;
-            }
+            if (!day) return <View key={`e-${index}`} style={styles.day} />;
 
             const active = isActive(day);
             const selected = isSelected(day);
@@ -227,6 +248,7 @@ export default function AdminAvailability() {
               <Pressable
                 key={toDateKey(day)}
                 onPress={() => handleDayPress(day)}
+                disabled={isPastMonth}
                 style={[
                   styles.day,
                   { borderColor: theme.colors.border },
@@ -249,6 +271,13 @@ export default function AdminAvailability() {
             );
           })}
         </View>
+
+        {/* FEEDBACK */}
+        {savedFeedback && (
+          <Text style={{ color: theme.colors.success, marginTop: 12 }}>
+            ✅ Janela salva com sucesso
+          </Text>
+        )}
 
         {/* AÇÕES */}
         {selecting.start && selecting.end && (
@@ -302,16 +331,25 @@ export default function AdminAvailability() {
 ========================= */
 
 const styles = StyleSheet.create({
-  calendarWrapper: {
+  wrapper: {
     width: "100%",
     maxWidth: 420,
     alignSelf: "center",
+  },
+  info: {
+    fontSize: 13,
+    marginBottom: 12,
+  },
+  legendRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 8,
   },
   monthRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: 12,
   },
   monthBtn: {
     borderWidth: 1,

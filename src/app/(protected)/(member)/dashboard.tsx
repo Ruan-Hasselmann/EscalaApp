@@ -34,7 +34,7 @@ export default function MemberDashboard() {
         <ActionListItem
           icon={
             <Ionicons
-              name="checkmark"
+              name="time-outline"
               size={iconSize}
               color={iconColor}
             />

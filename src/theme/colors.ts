@@ -7,6 +7,9 @@ export const lightColors = {
   primary: "#2563EB",
   primaryContrast: "#FFFFFF",
 
+  secondary: "#F59E0B",        // âmbar
+  secondaryContrast: "#FFFFFF",
+
   success: "#16A34A",
   warning: "#F59E0B",
   danger: "#DC2626",
@@ -22,6 +25,9 @@ export const darkColors = {
 
   primary: "#3B82F6",
   primaryContrast: "#020617",
+
+  secondary: "#FBBF24",        // âmbar mais claro
+  secondaryContrast: "#020617",
 
   success: "#22C55E",
   warning: "#FBBF24",

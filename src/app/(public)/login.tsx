@@ -6,6 +6,9 @@ import {
   StyleSheet,
   View,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
 } from "react-native";
 import { useRouter } from "expo-router";
 
@@ -24,6 +27,8 @@ export default function Login() {
   const [error, setError] = useState<string | null>(null);
 
   async function handleLogin() {
+    if (loading) return;
+
     if (!email || !password) {
       setError("Informe email e senha.");
       return;
@@ -43,116 +48,143 @@ export default function Login() {
 
   return (
     <AppScreen>
-      <View style={styles.container}>
-        {/* HEADER */}
-        <Text style={[styles.title, { color: theme.colors.text }]}>
-          🔐 Entrar
-        </Text>
-
-        <Text
-          style={[styles.subtitle, { color: theme.colors.textMuted }]}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
         >
-          Acesse sua conta para continuar
-        </Text>
-
-        {/* EMAIL */}
-        <TextInput
-          value={email}
-          onChangeText={setEmail}
-          placeholder="Email"
-          placeholderTextColor={theme.colors.textMuted}
-          autoCapitalize="none"
-          keyboardType="email-address"
-          style={[
-            styles.input,
-            {
-              color: theme.colors.text,
-              borderColor: theme.colors.border,
-            },
-          ]}
-        />
-
-        {/* SENHA */}
-        <TextInput
-          value={password}
-          onChangeText={setPassword}
-          placeholder="Senha"
-          placeholderTextColor={theme.colors.textMuted}
-          secureTextEntry
-          style={[
-            styles.input,
-            {
-              color: theme.colors.text,
-              borderColor: theme.colors.border,
-            },
-          ]}
-        />
-
-        {/* ERRO */}
-        {error && (
-          <Text
-            style={[styles.error, { color: theme.colors.danger }]}
-          >
-            {error}
-          </Text>
-        )}
-
-        {/* LOGIN */}
-        <Pressable
-          onPress={handleLogin}
-          disabled={loading}
-          style={[
-            styles.button,
-            {
-              backgroundColor: theme.colors.primary,
-              opacity: loading ? 0.7 : 1,
-            },
-          ]}
-        >
-          {loading ? (
-            <ActivityIndicator
-              color={theme.colors.primaryContrast}
-            />
-          ) : (
-            <Text
-              style={{
-                color: theme.colors.primaryContrast,
-                fontWeight:
-                  theme.typography.weights.semibold,
-              }}
-            >
-              Entrar
+          <View style={styles.card}>
+            {/* HEADER */}
+            <Text style={[styles.title, { color: theme.colors.text }]}>
+              🔐 Entrar
             </Text>
-          )}
-        </Pressable>
 
-        {/* LINKS */}
-        <View style={styles.links}>
-          <Pressable onPress={() => router.push("/register")}>
             <Text
               style={[
-                styles.link,
-                { color: theme.colors.primary },
-              ]}
-            >
-              Criar conta
-            </Text>
-          </Pressable>
-
-          <Pressable
-            onPress={() => router.push("/forgot-password")}
-          >
-            <Text
-              style={[
-                styles.link,
+                styles.subtitle,
                 { color: theme.colors.textMuted },
               ]}
             >
-              Esqueci minha senha
+              Acesse sua conta para continuar
             </Text>
-          </Pressable>
-        </View>
-      </View>
+
+            {/* EMAIL */}
+            <TextInput
+              value={email}
+              onChangeText={setEmail}
+              placeholder="Email"
+              placeholderTextColor={theme.colors.textMuted}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              editable={!loading}
+              returnKeyType="next"
+              style={[
+                styles.input,
+                {
+                  color: theme.colors.text,
+                  borderColor: theme.colors.border,
+                },
+              ]}
+            />
+
+            {/* SENHA */}
+            <TextInput
+              value={password}
+              onChangeText={setPassword}
+              placeholder="Senha"
+              placeholderTextColor={theme.colors.textMuted}
+              secureTextEntry
+              editable={!loading}
+              returnKeyType="done"
+              onSubmitEditing={handleLogin} // ✅ ENTER faz login
+              style={[
+                styles.input,
+                {
+                  color: theme.colors.text,
+                  borderColor: theme.colors.border,
+                },
+              ]}
+            />
+
+            {/* ERRO */}
+            {error && (
+              <Text
+                style={[
+                  styles.error,
+                  { color: theme.colors.danger },
+                ]}
+              >
+                {error}
+              </Text>
+            )}
+
+            {/* LOGIN */}
+            <Pressable
+              onPress={handleLogin}
+              disabled={loading}
+              style={[
+                styles.button,
+                {
+                  backgroundColor: theme.colors.primary,
+                  opacity: loading ? 0.7 : 1,
+                },
+              ]}
+            >
+              {loading ? (
+                <ActivityIndicator
+                  color={theme.colors.primaryContrast}
+                />
+              ) : (
+                <Text
+                  style={{
+                    color: theme.colors.primaryContrast,
+                    fontWeight:
+                      theme.typography.weights.semibold,
+                  }}
+                >
+                  Entrar
+                </Text>
+              )}
+            </Pressable>
+
+            {/* LINKS */}
+            <View style={styles.links}>
+              <Pressable
+                disabled={loading}
+                onPress={() => router.push("/register")}
+              >
+                <Text
+                  style={[
+                    styles.link,
+                    { color: theme.colors.primary },
+                  ]}
+                >
+                  Criar conta
+                </Text>
+              </Pressable>
+
+              <Pressable
+                disabled={loading}
+                onPress={() =>
+                  router.push("/forgot-password")
+                }
+              >
+                <Text
+                  style={[
+                    styles.link,
+                    { color: theme.colors.textMuted },
+                  ]}
+                >
+                  Esqueci minha senha
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </AppScreen>
   );
 }
@@ -162,9 +194,15 @@ export default function Login() {
 ========================= */
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
+  scroll: {
+    flexGrow: 1,
     justifyContent: "center",
+    padding: 16,
+  },
+  card: {
+    width: "100%",
+    maxWidth: 420,
+    alignSelf: "center",
     gap: 12,
   },
   title: {
