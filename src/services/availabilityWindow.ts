@@ -12,7 +12,35 @@ export type AvailabilityWindow = {
   updatedAt: number;
 };
 
+/**
+ * Janela resolvida (DERIVADA)
+ * Não é salva no Firestore
+ */
+export type AvailabilityWindowResolved = AvailabilityWindow & {
+  targetYear: number;
+  targetMonth: number; // 0-based
+};
+
 const REF = doc(db, "availabilityWindows", "current");
+
+/* =========================
+   HELPERS
+========================= */
+
+function getTargetMonth() {
+  const now = new Date();
+
+  const target = new Date(
+    now.getFullYear(),
+    now.getMonth() + 1,
+    1
+  );
+
+  return {
+    year: target.getFullYear(),
+    month: target.getMonth(),
+  };
+}
 
 /* =========================
    ADMIN ACTIONS
@@ -46,7 +74,7 @@ export async function toggleAvailability(open: boolean) {
 ========================= */
 
 export function listenAvailabilityWindow(
-  callback: (data: AvailabilityWindow | null) => void
+  callback: (data: AvailabilityWindowResolved | null) => void
 ) {
   return onSnapshot(REF, (snap) => {
     if (!snap.exists()) {
@@ -54,6 +82,35 @@ export function listenAvailabilityWindow(
       return;
     }
 
-    callback(snap.data() as AvailabilityWindow);
+    const data = snap.data() as AvailabilityWindow;
+
+    const { year, month } = getTargetMonth();
+
+    callback({
+      ...data,
+      targetYear: year,
+      targetMonth: month,
+    });
   });
+}
+
+/* =========================
+   TARGET MONTH (DOMAIN RULE)
+   Disponibilidade sempre vale
+   para o mês seguinte
+========================= */
+
+export function getCurrentAvailabilityTarget() {
+  const now = new Date();
+
+  const target = new Date(
+    now.getFullYear(),
+    now.getMonth() + 1,
+    1
+  );
+
+  return {
+    year: target.getFullYear(),
+    month: target.getMonth(), // 0-11
+  };
 }

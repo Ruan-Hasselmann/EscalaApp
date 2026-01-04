@@ -8,6 +8,7 @@ import {
   where,
 } from "firebase/firestore";
 import { db } from "./firebase";
+import { getCurrentAvailabilityTarget } from "./availabilityWindow";
 
 /* =========================
    TYPES
@@ -18,8 +19,8 @@ export type MemberAvailabilityStatus = "available" | "unavailable";
 export type MemberAvailability = {
   id: string; // userId__YYYY-MM-DD__serviceId
   userId: string;
-  dateKey: string;     // YYYY-MM-DD
-  serviceId: string;   // manha | noite | especial | etc
+  dateKey: string;     // YYYY-MM-DD (sempre do mês alvo)
+  serviceId: string;
   year: number;
   month: number;       // 0-11
   status: MemberAvailabilityStatus;
@@ -39,15 +40,15 @@ function availabilityDocId(
 }
 
 /* =========================
-   LISTEN BY MONTH (REALTIME)
+   LISTEN BY TARGET MONTH
 ========================= */
 
-export function listenMemberAvailabilityByMonth(
+export function listenMemberAvailabilityForTargetMonth(
   userId: string,
-  year: number,
-  month: number,
   callback: (items: MemberAvailability[]) => void
 ) {
+  const { year, month } = getCurrentAvailabilityTarget();
+
   const q = query(
     collection(db, "memberAvailability"),
     where("userId", "==", userId),
@@ -66,17 +67,17 @@ export function listenMemberAvailabilityByMonth(
 }
 
 /* =========================
-   SET STATUS
+   SET STATUS (SAFE)
 ========================= */
 
-export async function setMemberAvailability(
+async function setMemberAvailability(
   userId: string,
   dateKey: string,
   serviceId: string,
-  year: number,
-  month: number,
   status: MemberAvailabilityStatus
 ) {
+  const { year, month } = getCurrentAvailabilityTarget();
+
   const ref = doc(
     db,
     "memberAvailability",
@@ -99,7 +100,7 @@ export async function setMemberAvailability(
 }
 
 /* =========================
-   CLEAR (REMOVE DOC)
+   CLEAR
 ========================= */
 
 export async function clearMemberAvailability(
@@ -125,8 +126,6 @@ export async function toggleMemberAvailability(
   userId: string,
   dateKey: string,
   serviceId: string,
-  year: number,
-  month: number,
   current: MemberAvailabilityStatus | null
 ): Promise<MemberAvailabilityStatus | null> {
   if (!current) {
@@ -134,8 +133,6 @@ export async function toggleMemberAvailability(
       userId,
       dateKey,
       serviceId,
-      year,
-      month,
       "available"
     );
     return "available";
@@ -146,8 +143,6 @@ export async function toggleMemberAvailability(
       userId,
       dateKey,
       serviceId,
-      year,
-      month,
       "unavailable"
     );
     return "unavailable";
