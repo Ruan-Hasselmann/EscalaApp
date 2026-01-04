@@ -3,7 +3,7 @@ import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useTheme } from "@/contexts/ThemeContext";
 
-import { AppUser, toggleAdminRole, toggleUserActive } from "@/services/users";
+import { addUserRole, AppUser, removeUserRole, toggleAdminRole, toggleUserActive } from "@/services/users";
 import {
   Membership,
   upsertMembership,
@@ -137,6 +137,12 @@ export function ManagePersonModal({
     const m = membershipByMinistry[ministryId];
     if (!m) return;
     await updateMembershipRole(m.id, role);
+    if (role === "leader"){
+      await addUserRole(currentUser.id, role)
+    } else {
+      await removeUserRole(currentUser.id, "leader")
+    }
+    
   }
 
   /* =========================

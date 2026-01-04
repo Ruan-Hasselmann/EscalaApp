@@ -1,6 +1,7 @@
 import {
   collection,
   doc,
+  documentId,
   getDocs,
   query,
   where,
@@ -37,10 +38,7 @@ export type ServiceDay = {
   services: ServiceTurn[];
 };
 
-export type MemberAvailabilityStatus =
-  | "available"
-  | "unavailable"
-  | "pending";
+export type MemberAvailabilityStatus = "available" | "unavailable" | "pending";
 
 export type MemberAvailability = {
   id: string;
@@ -54,6 +52,10 @@ export type MemberAvailability = {
 
 export type ScheduleStatus = "draft" | "published";
 
+/* =========================
+   FLAGS
+========================= */
+
 export type ScheduleFlag =
   | {
       type: "overload";
@@ -62,9 +64,8 @@ export type ScheduleFlag =
       limit: number;
     }
   | {
-      type: "conflict_ministry_priority";
+      type: "same_day_multiple_services";
       personId: string;
-      blockedByMinistryId: string;
       dateKey: string;
       serviceId: string;
     }
@@ -72,12 +73,6 @@ export type ScheduleFlag =
       type: "fixed_person_conflict";
       personId: string;
       conflictWith: string;
-      dateKey: string;
-      serviceId: string;
-    }
-  | {
-      type: "not_confirmed";
-      personId: string;
       dateKey: string;
       serviceId: string;
     };
@@ -96,14 +91,11 @@ export type ScheduleDoc = {
   serviceId: string;
   serviceDate: string;
   serviceLabel: string;
-
   year: number;
   month: number;
-
   status: ScheduleStatus;
   assignments: GeneratedAssignment[];
   flags: ScheduleFlag[];
-
   generatedAt: number;
   generatedBy: string;
 };
@@ -123,38 +115,36 @@ export type GenerateSchedulesResult = {
 };
 
 /* =========================
-   FIXED CONFLICTS
+   🔥 FIXED NAME CONFLICTS (SOBERANO)
 ========================= */
 
-const FIXED_CONFLICTS: [string, string][] = [
-  ["ruan", "fabiano"], // troque por userIds reais se quiser
-];
+const FIXED_NAME_CONFLICTS: [string, string][] = [["ruan", "fabiano"]];
 
-function violatesFixedConflicts(
-  personId: string,
-  assigned: string[]
-) {
-  return FIXED_CONFLICTS.some(
-    ([a, b]) =>
-      (personId === a && assigned.includes(b)) ||
-      (personId === b && assigned.includes(a))
-  );
+function normalizeFirstName(name: string) {
+  return (name ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)[0];
 }
 
 /* =========================
    HELPERS
 ========================= */
 
-function scheduleDocId(
-  ministryId: string,
-  dateKey: string,
-  serviceId: string
-) {
+function scheduleDocId(ministryId: string, dateKey: string, serviceId: string) {
   return `${ministryId}__${dateKey}__${serviceId}`;
 }
 
 function serviceKey(dateKey: string, serviceId: string) {
   return `${dateKey}__${serviceId}`;
+}
+
+function chunk<T>(arr: T[], size: number) {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
 }
 
 /* =========================
@@ -223,6 +213,28 @@ async function listSchedulesByMonth(year: number, month: number) {
   }));
 }
 
+async function listUserNamesByUids(uids: string[]) {
+  const unique = Array.from(new Set(uids)).filter(Boolean);
+  if (!unique.length) return {};
+
+  const map: Record<string, string> = {};
+  const parts = chunk(unique, 10);
+
+  for (const part of parts) {
+    const q = query(
+      collection(db, "users"),
+      where(documentId(), "in", part)
+    );
+
+    const snap = await getDocs(q);
+    snap.docs.forEach((d) => {
+      map[d.id] = String(d.data().name ?? "");
+    });
+  }
+
+  return map;
+}
+
 /* =========================
    CORE GENERATION
 ========================= */
@@ -243,42 +255,49 @@ export async function generateAndSaveDraftSchedules(
     return { schedules: [], flags: [] };
   }
 
-  const [
-    serviceDays,
-    memberships,
-    availability,
-    existingSchedules,
-  ] = await Promise.all([
-    listServiceDaysByMonth(year, month),
-    listMembershipsByMinistryIds(ministryIds),
-    listMemberAvailabilityByMonth(year, month),
-    listSchedulesByMonth(year, month),
-  ]);
+  const [serviceDays, memberships, availability, existingSchedules] =
+    await Promise.all([
+      listServiceDaysByMonth(year, month),
+      listMembershipsByMinistryIds(ministryIds),
+      listMemberAvailabilityByMonth(year, month),
+      listSchedulesByMonth(year, month),
+    ]);
 
   /* =========================
-     INDEXES
+     USER NAMES
+  ========================= */
+
+  const userNameMap = await listUserNamesByUids(
+    memberships.map((m) => m.userId)
+  );
+
+  /* =========================
+     AVAILABILITY MAP
   ========================= */
 
   const availabilityMap: Record<string, MemberAvailabilityStatus> = {};
   availability.forEach((a) => {
-    availabilityMap[
-      `${a.dateKey}__${a.serviceId}__${a.userId}`
-    ] = a.status;
+    availabilityMap[`${a.dateKey}__${a.serviceId}__${a.userId}`] = a.status;
   });
 
-  const publishedByService: Record<string, string[]> = {};
+  /* =========================
+     LOAD & EXISTING ASSIGNMENTS
+  ========================= */
+
   const loadByPerson: Record<string, number> = {};
+  const assignedByService: Record<string, string[]> = {};
+  const assignedByDay: Record<string, string[]> = {};
 
   existingSchedules.forEach((s) => {
-    const k = serviceKey(s.serviceDate, s.serviceId);
     s.assignments.forEach((a) => {
-      loadByPerson[a.personId] =
-        (loadByPerson[a.personId] ?? 0) + 1;
+      loadByPerson[a.personId] = (loadByPerson[a.personId] ?? 0) + 1;
 
-      if (s.status === "published") {
-        publishedByService[k] ??= [];
-        publishedByService[k].push(a.personId);
-      }
+      const sKey = serviceKey(s.serviceDate, s.serviceId);
+      assignedByService[sKey] ??= [];
+      assignedByService[sKey].push(a.personId);
+
+      assignedByDay[s.serviceDate] ??= [];
+      assignedByDay[s.serviceDate].push(a.personId);
     });
   });
 
@@ -295,87 +314,54 @@ export async function generateAndSaveDraftSchedules(
   const generated: ScheduleDoc[] = [];
   const allFlags: ScheduleFlag[] = [];
 
-  const assignedThisRun: Record<string, string[]> = {};
-  const blockedByMinistry: Record<string, string> = {};
+  const assignedThisRunByService: Record<string, string[]> = {};
+  const assignedThisRunByDay: Record<string, string[]> = {};
 
   for (const ministryId of ministryIds) {
     const members = membershipsByMinistry[ministryId] ?? [];
 
     for (const day of serviceDays) {
       for (const service of day.services ?? []) {
-        const docId = scheduleDocId(
-          ministryId,
-          day.dateKey,
-          service.id
-        );
-
-        const existing = existingSchedules.find(
-          (s) => s.id === docId
-        );
+        const docId = scheduleDocId(ministryId, day.dateKey, service.id);
+        const existing = existingSchedules.find((s) => s.id === docId);
 
         if (existing?.status === "published") continue;
-        if (existing?.status === "draft" && !overwriteDraft)
-          continue;
+        if (existing?.status === "draft" && !overwriteDraft) continue;
 
         const sKey = serviceKey(day.dateKey, service.id);
-
-        const alreadyAssigned = [
-          ...(publishedByService[sKey] ?? []),
-          ...(assignedThisRun[sKey] ?? []),
-        ];
 
         const candidates = members
           .map((m) => m.userId)
           .filter((userId) => {
-            if (alreadyAssigned.includes(userId)) {
-              allFlags.push({
-                type: "conflict_ministry_priority",
-                personId: userId,
-                blockedByMinistryId:
-                  blockedByMinistry[
-                    `${sKey}__${userId}`
-                  ] ?? "published",
-                dateKey: day.dateKey,
-                serviceId: service.id,
-              });
-              return false;
-            }
+            const myName = normalizeFirstName(userNameMap[userId] ?? "");
+            if (!myName) return false;
+
+            // 🔥 Regra soberana: Ruan x Fabiano
+            const assignedNames =
+              [...(assignedByService[sKey] ?? []), ...(assignedThisRunByService[sKey] ?? [])]
+                .map((id) => normalizeFirstName(userNameMap[id] ?? ""));
 
             if (
-              violatesFixedConflicts(userId, alreadyAssigned)
+              FIXED_NAME_CONFLICTS.some(
+                ([a, b]) =>
+                  (myName === a && assignedNames.includes(b)) ||
+                  (myName === b && assignedNames.includes(a))
+              )
             ) {
-              const pair = FIXED_CONFLICTS.find(
-                ([a, b]) => a === userId || b === userId
-              );
-
               allFlags.push({
                 type: "fixed_person_conflict",
                 personId: userId,
-                conflictWith:
-                  pair?.[0] === userId
-                    ? pair[1]
-                    : pair?.[0] ?? "unknown",
+                conflictWith: myName === "ruan" ? "fabiano" : "ruan",
                 dateKey: day.dateKey,
                 serviceId: service.id,
               });
               return false;
             }
 
+            // 🔒 Disponibilidade: SOMENTE available
             const status =
-              availabilityMap[
-                `${day.dateKey}__${service.id}__${userId}`
-              ] ?? "available";
-
-            if (status === "unavailable") return false;
-
-            if (status !== "available") {
-              allFlags.push({
-                type: "not_confirmed",
-                personId: userId,
-                dateKey: day.dateKey,
-                serviceId: service.id,
-              });
-            }
+              availabilityMap[`${day.dateKey}__${service.id}__${userId}`];
+            if (status !== "available") return false;
 
             return true;
           });
@@ -384,14 +370,14 @@ export async function generateAndSaveDraftSchedules(
 
         const chosen = [...candidates].sort(
           (a, b) =>
-            (loadByPerson[a] ?? 0) -
-              (loadByPerson[b] ?? 0) ||
+            (loadByPerson[a] ?? 0) - (loadByPerson[b] ?? 0) ||
             a.localeCompare(b)
         )[0];
 
-        const assignmentFlags: ScheduleFlag[] = [];
-        const currentLoad = loadByPerson[chosen] ?? 0;
+        const flags: ScheduleFlag[] = [];
 
+        // ⚠️ Sobrecarga mensal
+        const currentLoad = loadByPerson[chosen] ?? 0;
         if (currentLoad >= overloadLimit) {
           const f: ScheduleFlag = {
             type: "overload",
@@ -399,17 +385,33 @@ export async function generateAndSaveDraftSchedules(
             current: currentLoad,
             limit: overloadLimit,
           };
-          assignmentFlags.push(f);
+          flags.push(f);
+          allFlags.push(f);
+        }
+
+        // ⚠️ Mesmo dia, outro culto
+        const sameDay =
+          assignedByDay[day.dateKey]?.includes(chosen) ||
+          assignedThisRunByDay[day.dateKey]?.includes(chosen);
+
+        if (sameDay) {
+          const f: ScheduleFlag = {
+            type: "same_day_multiple_services",
+            personId: chosen,
+            dateKey: day.dateKey,
+            serviceId: service.id,
+          };
+          flags.push(f);
           allFlags.push(f);
         }
 
         loadByPerson[chosen] = currentLoad + 1;
 
-        assignedThisRun[sKey] ??= [];
-        assignedThisRun[sKey].push(chosen);
-        blockedByMinistry[
-          `${sKey}__${chosen}`
-        ] = ministryId;
+        assignedThisRunByService[sKey] ??= [];
+        assignedThisRunByService[sKey].push(chosen);
+
+        assignedThisRunByDay[day.dateKey] ??= [];
+        assignedThisRunByDay[day.dateKey].push(chosen);
 
         generated.push({
           id: docId,
@@ -426,10 +428,10 @@ export async function generateAndSaveDraftSchedules(
               personId: chosen,
               ministryId,
               source: "auto",
-              flags: assignmentFlags,
+              flags,
             },
           ],
-          flags: assignmentFlags,
+          flags,
           generatedAt: Date.now(),
           generatedBy: leaderUserId,
         });

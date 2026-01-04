@@ -41,7 +41,7 @@ export default function AdminServiceDays() {
 
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
-  const [month, setMonth] = useState(today.getMonth());
+  const [month, setMonth] = useState(today.getMonth() + 1);
 
   const [days, setDays] = useState<ServiceDay[]>([]);
   const [loading, setLoading] = useState(true);

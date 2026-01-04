@@ -265,32 +265,48 @@ export default function LeaderGenerateSchedule() {
   const membersDoMinisterio = useMemo(() => {
     if (!selectedSchedule) return [];
 
+    const serviceKey = `${selectedSchedule.serviceDate}__${selectedSchedule.serviceId}`;
+
+    // 🔥 nomes já escalados no culto (draft + published)
+    const assignedNames = schedules
+      .filter(
+        (s) =>
+          s.serviceDate === selectedSchedule.serviceDate &&
+          s.serviceId === selectedSchedule.serviceId
+      )
+      .flatMap((s) =>
+        s.assignments.map((a) =>
+          firstName(userMap[a.personId]?.name ?? "").toLowerCase()
+        )
+      );
+
     return ministryMemberships
       .filter((m) => m.active)
       .filter((m) => {
-        const alreadyAssigned = schedules.some(
-          (s) =>
-            s.serviceDate === selectedSchedule.serviceDate &&
-            s.serviceId === selectedSchedule.serviceId &&
-            s.assignments.some((a) => a.personId === m.userId)
-        );
+        const user = userMap[m.userId];
+        if (!user) return false;
 
-        if (alreadyAssigned) return false;
-
+        // 🔒 disponibilidade: SÓ AVAILABLE
         const availabilityKey = `${m.userId}__${selectedSchedule.serviceDate}__${selectedSchedule.serviceId}`;
-        if (availabilityMap.get(availabilityKey) === "unavailable")
+        if (availabilityMap.get(availabilityKey) !== "available") return false;
+
+        const myName = firstName(user.name).toLowerCase();
+
+        // 🔥 conflito soberano Ruan x Fabiano
+        if (
+          (myName === "ruan" && assignedNames.includes("fabiano")) ||
+          (myName === "fabiano" && assignedNames.includes("ruan"))
+        ) {
           return false;
+        }
 
         return true;
       })
-      .map((m) => {
-        const user = userMap[m.userId];
-        return {
-          id: m.userId,
-          name: user?.name ?? m.userId,
-          status: "confirmed" as const,
-        };
-      });
+      .map((m) => ({
+        id: m.userId,
+        name: userMap[m.userId]?.name ?? m.userId,
+        status: "confirmed" as const,
+      }));
   }, [
     selectedSchedule,
     ministryMemberships,
@@ -436,20 +452,45 @@ export default function LeaderGenerateSchedule() {
                       {ministryMap[s.ministryId]?.name}
                     </Text>
 
-                    {s.assignments.map((a) => (
-                      <Text
-                        key={a.personId}
-                        style={{
-                          color: theme.colors.text,
-                          fontSize: 14,
-                        }}
-                      >
-                        •{" "}
-                        {userMap[a.personId]
-                          ? firstName(userMap[a.personId].name)
-                          : a.personId}
-                      </Text>
-                    ))}
+                    {s.assignments.map((a) => {
+                      const assignmentFlags = [
+                        ...(s.flags ?? []),
+                        //...(a.flags ?? []),
+                      ];
+
+                      return (
+                        <View key={a.personId}>
+                          <Text
+                            style={{
+                              color: theme.colors.text,
+                              fontSize: 14,
+                            }}
+                          >
+                            •{" "}
+                            {userMap[a.personId]
+                              ? firstName(userMap[a.personId].name)
+                              : a.personId}
+                          </Text>
+
+                          {assignmentFlags.map((f, idx) => (
+                            <Text
+                              key={idx}
+                              style={{
+                                color: theme.colors.textMuted,
+                                fontSize: 12,
+                                marginLeft: 12,
+                              }}
+                            >
+                              ⚠{" "}
+                              {f.type === "overload" &&
+                                "Sobrecarga no mês"}
+                              {f.type === "conflict_ministry_priority" &&
+                                "Já escalado em outro ministério neste culto"}
+                            </Text>
+                          ))}
+                        </View>
+                      );
+                    })}
                   </View>
 
                   <Pressable

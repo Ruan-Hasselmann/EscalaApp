@@ -114,6 +114,7 @@ export default function RegisterScreen() {
           roles: ["member"],
           active: true,
           createdAt: serverTimestamp(),
+          activeRole: "member"
         });
 
         // 3️⃣ people
