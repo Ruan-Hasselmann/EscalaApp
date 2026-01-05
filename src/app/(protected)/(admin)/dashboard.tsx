@@ -32,6 +32,11 @@ export default function AdminDashboard() {
 
       <ActionList>
         <ActionListItem
+          title="Escalas Publicadas (teste)"
+          description="Abrir tela de escalas publicadas"
+          onPress={() => router.push("/schedule/consolidate")}
+        />
+        <ActionListItem
           icon={
             <Ionicons
               name="school-outline"

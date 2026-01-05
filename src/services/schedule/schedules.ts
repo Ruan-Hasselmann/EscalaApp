@@ -130,6 +130,7 @@ export function listenSchedulesByMinistry(
 export async function publishSchedule(scheduleId: string) {
   await updateDoc(doc(db, "schedules", scheduleId), {
     status: "published",
+    publishedAt: Date.now(),
   });
 }
 
@@ -283,5 +284,60 @@ export async function updateScheduleAssignment(
         source: "manual",
       },
     ],
+  });
+}
+
+/* =========================
+   QUERIES
+========================= */
+
+// 🔹 Para membro / líder
+export async function listPublishedSchedulesByMinistryIds(
+  ministryIds: string[],
+  year: number,
+  month: number // 🔥 mês já no formato do banco (1–12)
+): Promise<Schedule[]> {
+  if (ministryIds.length === 0) return [];
+
+  const q = query(
+    collection(db, "schedules"),
+    where("status", "==", "published"),
+    where("year", "==", year),
+    where("month", "==", month),
+    where("ministryId", "in", ministryIds)
+  );
+
+  const snap = await getDocs(q);
+
+  return snap.docs.map((d) => ({
+    id: d.id,
+    ...(d.data() as Omit<Schedule, "id">),
+  }));
+}
+
+// 🔹 Para admin (status do mês)
+export async function listSchedulesStatusByMonth(
+  year: number,
+  month: number
+): Promise<
+  {
+    ministryId: string;
+    status: ScheduleStatus;
+  }[]
+> {
+  const q = query(
+    collection(db, "schedules"),
+    where("year", "==", year),
+    where("month", "==", month)
+  );
+
+  const snap = await getDocs(q);
+
+  return snap.docs.map((d) => {
+    const data = d.data();
+    return {
+      ministryId: data.ministryId,
+      status: data.status,
+    };
   });
 }
