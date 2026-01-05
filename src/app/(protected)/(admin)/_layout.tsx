@@ -18,12 +18,21 @@ export default function AdminLayout() {
         },
       }}
     >
-      <Tabs.Screen
+      {/* <Tabs.Screen
         name="dashboard"
         options={{
           title: "Dashboard",
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="apps-outline" size={size} color={color} />
+          ),
+        }}
+      /> */}
+      <Tabs.Screen
+        name="schedule/consolidate"
+        options={{
+          title: "Escala geral",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="documents-outline" size={size} color={color} />
           ),
         }}
       />
@@ -89,6 +98,12 @@ export default function AdminLayout() {
       />
       <Tabs.Screen
         name="service-days/ServiceDayModal"
+        options={{
+          href: null
+        }}
+      />
+      <Tabs.Screen
+        name="dashboard"
         options={{
           href: null
         }}

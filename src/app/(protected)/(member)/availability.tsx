@@ -207,7 +207,7 @@ export default function MemberAvailabilityScreen() {
 
   return (
     <AppScreen>
-      <AppHeader title="🗓️ Minha disponibilidade" />
+      <AppHeader title="🗓️ Minha disponibilidade" back/>
 
       <View style={styles.wrapper}>
         <Text style={[styles.subtitle, { color: theme.colors.text }]}>

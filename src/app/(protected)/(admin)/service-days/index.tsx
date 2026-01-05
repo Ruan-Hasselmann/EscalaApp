@@ -121,7 +121,7 @@ export default function AdminServiceDays() {
 
   return (
     <AppScreen>
-      <AppHeader title="📅 Dias de Culto" />
+      <AppHeader title="📅 Dias de Culto" back/>
 
       <View style={styles.calendarWrapper}>
         {/* MÊS */}

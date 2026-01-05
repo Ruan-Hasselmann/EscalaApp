@@ -32,27 +32,41 @@ export async function getPersonById(
   };
 }
 
+/* =========================
+   HELPERS
+========================= */
+
+function firstName(name: string) {
+  return name
+    .trim()
+    .split(/\s+/)[0];
+}
+
+/**
+ * Retorna um mapa:
+ * { [personId]: firstName }
+ */
 export async function getPeopleNamesByIds(
-  userIds: string[]
+  personIds: string[]
 ): Promise<Record<string, string>> {
-  const unique = Array.from(new Set(userIds)).filter(Boolean);
-  if (!unique.length) return {};
+  const uniqueIds = Array.from(new Set(personIds)).filter(Boolean);
+  if (uniqueIds.length === 0) return {};
 
   const map: Record<string, string> = {};
 
-  for (let i = 0; i < unique.length; i += 10) {
-    const chunk = unique.slice(i, i + 10);
+  for (let i = 0; i < uniqueIds.length; i += 10) {
+    const chunk = uniqueIds.slice(i, i + 10);
 
     const q = query(
       collection(db, "people"),
-      where("userId", "in", chunk) // 🔥 AQUI É O PONTO-CHAVE
+      where(documentId(), "in", chunk)
     );
 
     const snap = await getDocs(q);
 
     snap.docs.forEach((d) => {
-      const data = d.data();
-      map[data.userId] = String(data.name ?? "—");
+      const fullName = String(d.data().name ?? "—");
+      map[d.id] = firstName(fullName);
     });
   }
 

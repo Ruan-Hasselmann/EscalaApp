@@ -34,6 +34,18 @@ export default function MemberDashboard() {
         <ActionListItem
           icon={
             <Ionicons
+              name="documents-outline"
+              size={iconSize}
+              color={iconColor}
+            />
+          }
+          title="Escala geral"
+          description="Abrir tela de escalas publicadas"
+          onPress={() => router.push("/schedule/consolidate")}
+        />
+        <ActionListItem
+          icon={
+            <Ionicons
               name="time-outline"
               size={iconSize}
               color={iconColor}

@@ -64,3 +64,16 @@ export async function toggleMinistryActive(
     active,
   });
 }
+
+export async function getMinistryMap(): Promise<Record<string, string>> {
+  const snap = await getDocs(collection(db, "ministries"));
+
+  const map: Record<string, string> = {};
+
+  snap.docs.forEach((d) => {
+    const data = d.data();
+    map[d.id] = String(data.name ?? "Ministério");
+  });
+
+  return map;
+}

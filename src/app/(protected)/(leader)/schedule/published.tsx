@@ -167,7 +167,7 @@ export default function LeaderPublishedSchedules() {
 
   return (
     <AppScreen>
-      <AppHeader title="📅 Escalas publicadas" />
+      <AppHeader title="📅 Escalas publicadas" back/>
 
       <ScrollView style={styles.wrapper}>
         {published.length > 0 && (

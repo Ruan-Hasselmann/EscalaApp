@@ -24,8 +24,16 @@ export default function LeaderLayout() {
           href: null
         }}
       />
-
       <Tabs.Screen
+        name="schedule/consolidate"
+        options={{
+          title: "Escala geral",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="documents-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      {/* <Tabs.Screen
         name="dashboard"
         options={{
           title: "Dashboard",
@@ -33,8 +41,7 @@ export default function LeaderLayout() {
             <Ionicons name="apps" size={size} color={color} />
           ),
         }}
-      />
-
+      /> */}
       <Tabs.Screen
         name="schedule/generate"
         options={{
@@ -47,10 +54,16 @@ export default function LeaderLayout() {
       <Tabs.Screen
         name="schedule/published"
         options={{
-          title: "Escalas",
+          title: "Escalas ministérios",
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="documents-outline" size={size} color={color} />
           ),
+        }}
+      />
+      <Tabs.Screen
+        name="dashboard"
+        options={{
+          href: null
         }}
       />
     </Tabs>

@@ -34,6 +34,18 @@ export default function LeaderDashboard() {
         <ActionListItem
           icon={
             <Ionicons
+              name="documents-outline"
+              size={iconSize}
+              color={iconColor}
+            />
+          }
+          title="Escala geral"
+          description="Abrir tela de escalas publicadas"
+          onPress={() => router.push("/schedule/consolidate")}
+        />
+        <ActionListItem
+          icon={
+            <Ionicons
               name="construct-outline"
               size={iconSize}
               color={iconColor}
@@ -52,8 +64,8 @@ export default function LeaderDashboard() {
               color={iconColor}
             />
           }
-          title="Escalas publicadas"
-          description="Escalas publicadas do ministerio"
+          title="Escalas ministério"
+          description="Escalas publicadas do ministério"
           onPress={() => router.push("/schedule/published")}
         />
       </ActionList>

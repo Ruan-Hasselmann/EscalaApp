@@ -172,7 +172,7 @@ export default function AdminPeople() {
 
   return (
     <AppScreen>
-      <AppHeader title="👥 Pessoas" />
+      <AppHeader title="👥 Pessoas" back/>
 
       <View style={styles.wrapper}>
         {rows.map((p) => (

@@ -94,7 +94,7 @@ export default function AdminMinistries() {
 
   return (
     <AppScreen>
-      <AppHeader title="🎧 Ministérios" />
+      <AppHeader title="🎧 Ministérios" back/>
 
       <View style={styles.wrapper}>
         {/* NOVO */}

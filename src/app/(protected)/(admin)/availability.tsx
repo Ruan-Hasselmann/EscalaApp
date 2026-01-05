@@ -176,7 +176,7 @@ export default function AdminAvailability() {
 
   return (
     <AppScreen>
-      <AppHeader title="🪟 Janela de Disponibilidade" />
+      <AppHeader title="🪟 Janela de Disponibilidade" back/>
 
       <View style={styles.wrapper}>
         {/* INFO */}

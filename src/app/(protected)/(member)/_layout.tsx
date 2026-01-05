@@ -23,12 +23,21 @@ export default function MemberLayout() {
           href: null
         }}
       />
-      <Tabs.Screen
+      {/* <Tabs.Screen
         name="dashboard"
         options={{
           title: "Dashboard",
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="apps-outline" size={size} color={color} />
+          ),
+        }}
+      /> */}
+      <Tabs.Screen
+        name="schedule/consolidate"
+        options={{
+          title: "Escala geral",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="documents-outline" size={size} color={color} />
           ),
         }}
       />
@@ -53,6 +62,12 @@ export default function MemberLayout() {
       />
       <Tabs.Screen
         name="modal/TurnSelectModal"
+        options={{
+          href: null
+        }}
+      />
+      <Tabs.Screen
+        name="dashboard"
         options={{
           href: null
         }}
