@@ -18,25 +18,25 @@ export type ScheduleStatus = "draft" | "published";
 
 export type ScheduleFlag =
   | {
-      type: "overload";
-      personId: string;
-      current: number;
-      limit: number;
-    }
+    type: "overload";
+    personId: string;
+    current: number;
+    limit: number;
+  }
   | {
-      type: "conflict_ministry_priority";
-      personId: string;
-      blockedByMinistryId: string;
-      dateKey: string;
-      serviceId: string;
-    }
+    type: "conflict_ministry_priority";
+    personId: string;
+    blockedByMinistryId: string;
+    dateKey: string;
+    serviceId: string;
+  }
   | {
-      type: "fixed_person_conflict";
-      personId: string;
-      conflictWith: string;
-      dateKey: string;
-      serviceId: string;
-    };
+    type: "fixed_person_conflict";
+    personId: string;
+    conflictWith: string;
+    dateKey: string;
+    serviceId: string;
+  };
 
 export type ScheduleAssignment = {
   personId: string;
@@ -315,5 +315,60 @@ export async function updateScheduleAssignment(
 
   await updateDoc(doc(db, "schedules", scheduleId), {
     assignments: [{ personId, source: "manual" }],
+  });
+}
+
+/* =========================
+   LISTENERS (PUBLICADAS)
+========================= */
+
+// 🔹 Todas as escalas publicadas do mês
+export function listenPublishedSchedulesByMonth(
+  year: number,
+  month: number, // 1–12
+  callback: (items: Schedule[]) => void
+) {
+  const q = query(
+    collection(db, "schedules"),
+    where("status", "==", "published"),
+    where("year", "==", year),
+    where("month", "==", month)
+  );
+
+  return onSnapshot(q, (snap) => {
+    const items: Schedule[] = snap.docs.map((d) => ({
+      id: d.id,
+      ...(d.data() as Omit<Schedule, "id">),
+    }));
+    callback(items);
+  });
+}
+
+// 🔹 Escalas publicadas SOMENTE dos ministérios informados
+export function listenPublishedSchedulesByMinistryIds(
+  ministryIds: string[],
+  year: number,
+  month: number, // 1–12
+  callback: (items: Schedule[]) => void
+) {
+  if (ministryIds.length === 0) {
+    callback([]);
+    return () => { };
+  }
+
+  const q = query(
+    collection(db, "schedules"),
+    where("status", "==", "published"),
+    where("year", "==", year),
+    where("month", "==", month),
+    where("ministryId", "in", ministryIds)
+  );
+
+  return onSnapshot(q, (snap) => {
+    const items: Schedule[] = snap.docs.map((d) => ({
+      id: d.id,
+      ...(d.data() as Omit<Schedule, "id">),
+    }));
+    callback(items);
   });
 }

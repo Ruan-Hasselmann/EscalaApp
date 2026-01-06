@@ -342,7 +342,7 @@ export default function LeaderGenerateSchedule() {
 
   return (
     <AppScreen>
-      <AppHeader title="🗓️ Gerar & revisar escala" />
+      <AppHeader title="🗓️ Gerar & revisar escala" back/>
 
       <View style={styles.wrapper}>
         <Pressable

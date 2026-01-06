@@ -175,3 +175,32 @@ export async function publishGeneralSchedule(
     publishedAt: serverTimestamp(),
   });
 }
+
+/* =========================
+   LISTENER
+========================= */
+
+export function listenGeneralScheduleByMonth(
+  year: number,
+  month: number, // 1–12
+  callback: (general: GeneralSchedule | null) => void
+) {
+  const q = query(
+    collection(db, "generalSchedules"),
+    where("year", "==", year),
+    where("month", "==", month)
+  );
+
+  return onSnapshot(q, (snap) => {
+    if (snap.empty) {
+      callback(null);
+      return;
+    }
+
+    const d = snap.docs[0];
+    callback({
+      id: d.id,
+      ...(d.data() as Omit<GeneralSchedule, "id">),
+    });
+  });
+}

@@ -14,10 +14,16 @@ import { AppHeader } from "@/components/layout/AppHeader";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 
-import { listenMembershipsByUser } from "@/services/memberships";
-import { listenAllSchedulesByMonth, Schedule } from "@/services/schedule/schedules";
+import {
+  listenAllSchedulesByMonth,
+  Schedule,
+} from "@/services/schedule/schedules";
+import {
+  publishGeneralSchedule,
+  listenGeneralScheduleByMonth,
+} from "@/services/schedule/generalSchedules";
 import { getPeopleNamesByIds } from "@/services/people";
-import { getMinistryMap } from "@/services/ministries";
+import { getMinistryMap, listenMinistriesSchedule } from "@/services/ministries";
 
 /* =========================
    HELPERS
@@ -41,8 +47,8 @@ function formatDatePtBr(dateKey: string) {
   });
 }
 
-function monthLabel(year: number, month: number) {
-  return new Date(year, month, 1).toLocaleDateString("pt-BR", {
+function monthLabel(year: number, jsMonth: number) {
+  return new Date(year, jsMonth, 1).toLocaleDateString("pt-BR", {
     month: "long",
     year: "numeric",
   });
@@ -78,78 +84,65 @@ function groupByService(schedules: Schedule[]) {
    SCREEN
 ========================= */
 
-export default function PublishedScheduleScreen() {
+export default function AdminPublishedSchedulesScreen() {
   const { profile } = useAuth();
   const { theme } = useTheme();
 
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
-  const [month, setMonth] = useState(today.getMonth() + 1);
+  const [month, setMonth] = useState(today.getMonth()); // JS 0–11
 
   const [loading, setLoading] = useState(true);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
-  const [ministryIds, setMinistryIds] = useState<string[]>([]);
   const [peopleNames, setPeopleNames] = useState<Record<string, string>>({});
   const [ministries, setMinistries] = useState<Record<string, string>>({});
-
-  const isAdmin = profile?.roles.includes("admin") ?? false;
-
-  /* =========================
-     MEMBERSHIPS
-  ========================= */
-
-  useEffect(() => {
-    if (!profile?.uid) return;
-    return listenMembershipsByUser(profile.uid, (items) =>
-      setMinistryIds(items.map((m) => m.ministryId))
-    );
-  }, [profile?.uid]);
+  const [generalPublished, setGeneralPublished] = useState(false);
 
   /* =========================
-     LOAD DATA (MONTH)
+     REALTIME LOAD
   ========================= */
 
   useEffect(() => {
     if (!profile) return;
 
-    const dbMonth = month;
-
     setLoading(true);
 
-    const unsubscribe = listenAllSchedulesByMonth(
+    const unsubSchedules = listenAllSchedulesByMonth(
       year,
-      dbMonth,
+      month + 1,
       async (allSchedules) => {
-        const visible = isAdmin
-          ? allSchedules
-          : allSchedules.filter((s) =>
-            ministryIds.includes(s.ministryId)
-          );
-
-        setSchedules(visible);
+        setSchedules(allSchedules);
 
         const personIds = Array.from(
           new Set(
-            visible.flatMap((s) =>
+            allSchedules.flatMap((s) =>
               s.assignments.map((a) => a.personId)
             )
           )
         );
 
-        const [names, ministryMap] = await Promise.all([
-          getPeopleNamesByIds(personIds),
-          getMinistryMap(),
-        ]);
-
+        const names = await getPeopleNamesByIds(personIds);
         setPeopleNames(names);
-        setMinistries(ministryMap);
 
         setLoading(false);
       }
     );
 
-    return () => unsubscribe();
-  }, [profile, year, month, ministryIds.join(","), isAdmin]);
+    const unsubMinistries = listenMinistriesSchedule(setMinistries);
+
+    const unsubGeneral = listenGeneralScheduleByMonth(
+      year,
+      month + 1,
+      (general) => setGeneralPublished(!!general)
+    );
+
+    return () => {
+      unsubSchedules();
+      unsubMinistries();
+      unsubGeneral();
+    };
+  }, [profile, year, month]);
+
 
   /* =========================
      VIEW MODEL
@@ -166,6 +159,62 @@ export default function PublishedScheduleScreen() {
   );
 
   /* =========================
+     🔥 VALIDATION (CORRETA)
+  ========================= */
+
+  const validation = useMemo(() => {
+    if (generalPublished) {
+      return { canPublish: false, reason: "published" };
+    }
+
+    if (Object.keys(ministries).length === 0) {
+      return { canPublish: false, reason: "no_ministries" };
+    }
+
+    const schedulesByMinistry: Record<string, Schedule[]> = {};
+    schedules.forEach((s) => {
+      schedulesByMinistry[s.ministryId] ??= [];
+      schedulesByMinistry[s.ministryId].push(s);
+    });
+
+    for (const ministryId of Object.keys(ministries)) {
+      const ministrySchedules = schedulesByMinistry[ministryId];
+
+      if (!ministrySchedules || ministrySchedules.length === 0) {
+        return { canPublish: false, reason: "missing_schedule" };
+      }
+
+      if (ministrySchedules.some((s) => s.status === "draft")) {
+        return { canPublish: false, reason: "draft_exists" };
+      }
+    }
+
+    return { canPublish: true, reason: "ok" };
+  }, [schedules, ministries, generalPublished]);
+
+  const publishLabel = useMemo(() => {
+    switch (validation.reason) {
+      case "published":
+        return "✅ Escala geral já publicada";
+      case "missing_schedule":
+        return "⚠️ Existem ministérios sem escala criada";
+      case "draft_exists":
+        return "⚠️ Ainda existem escalas em rascunho";
+      default:
+        return "📢 Publicar escala geral";
+    }
+  }, [validation]);
+
+  /* =========================
+     ACTION
+  ========================= */
+
+  async function handlePublishGeneral() {
+    if (!validation.canPublish) return;
+    await publishGeneralSchedule(year, month + 1);
+  }
+
+  /* =========================
      NAVIGATION
   ========================= */
 
@@ -176,7 +225,7 @@ export default function PublishedScheduleScreen() {
   }
 
   /* =========================
-     STYLES (UX COPIADO)
+     STYLES
   ========================= */
 
   const styles = useMemo(
@@ -211,18 +260,30 @@ export default function PublishedScheduleScreen() {
           color: theme.colors.text,
           textTransform: "capitalize",
         },
+        publishBtn: {
+          marginHorizontal: 16,
+          marginBottom: 12,
+          padding: 14,
+          borderRadius: 12,
+          alignItems: "center",
+          backgroundColor: validation.canPublish
+            ? theme.colors.primary
+            : theme.colors.border,
+        },
+        publishText: {
+          fontWeight: "700",
+          color: validation.canPublish
+            ? theme.colors.background
+            : theme.colors.textMuted,
+        },
         card: {
           borderWidth: 1,
           borderRadius: 16,
-          padding: 12,
+          padding: 14,
           marginBottom: 14,
-          gap: 10,
           backgroundColor: theme.colors.surface,
           borderColor: theme.colors.border,
-        },
-        headerRow: {
-          flexDirection: "row",
-          justifyContent: "space-between",
+          gap: 10,
         },
         cultTitle: {
           fontSize: 15,
@@ -246,17 +307,15 @@ export default function PublishedScheduleScreen() {
         draft: {
           fontSize: 13,
           fontStyle: "italic",
-          color: theme.colors.textMuted,
-          opacity: 0.7,
+          color: theme.colors.warning ?? theme.colors.textMuted,
         },
         empty: {
           marginTop: 32,
           textAlign: "center",
           color: theme.colors.textMuted,
-          lineHeight: 20,
         },
       }),
-    [theme]
+    [theme, validation]
   );
 
   /* =========================
@@ -265,22 +324,29 @@ export default function PublishedScheduleScreen() {
 
   return (
     <AppScreen>
-      <AppHeader title="Escalas Publicadas" back />
+      <AppHeader title="Escalas (Admin)" back />
 
-      {/* NAV MÊS */}
       <View style={styles.monthHeader}>
         <Pressable onPress={() => goTo(-1)} style={styles.navBtn}>
           <Text style={styles.navText}>◀</Text>
         </Pressable>
 
         <Text style={styles.monthTitle}>
-          {monthLabel(year, month)}
+          {monthLabel(year, month + 1)}
         </Text>
 
         <Pressable onPress={() => goTo(1)} style={styles.navBtn}>
           <Text style={styles.navText}>▶</Text>
         </Pressable>
       </View>
+
+      <Pressable
+        disabled={!validation.canPublish}
+        onPress={handlePublishGeneral}
+        style={styles.publishBtn}
+      >
+        <Text style={styles.publishText}>{publishLabel}</Text>
+      </Pressable>
 
       {loading ? (
         <ActivityIndicator style={{ marginTop: 24 }} />
@@ -292,11 +358,9 @@ export default function PublishedScheduleScreen() {
         <ScrollView style={styles.wrapper}>
           {grouped.map(({ key, items, ref }) => (
             <View key={key} style={styles.card}>
-              <View style={styles.headerRow}>
-                <Text style={styles.cultTitle}>
-                  {ref.serviceLabel} • {formatDatePtBr(ref.serviceDate)}
-                </Text>
-              </View>
+              <Text style={styles.cultTitle}>
+                {ref.serviceLabel} • {formatDatePtBr(ref.serviceDate)}
+              </Text>
 
               {ministryList.map((m) => {
                 const schedule = items.find(
@@ -308,9 +372,9 @@ export default function PublishedScheduleScreen() {
                     <Text style={styles.ministry}>{m.name}</Text>
 
                     {!schedule || schedule.status === "draft" ? (
-                      <Text style={styles.draft}>🟡 Escala em rascunho</Text>
-                    ) : schedule.assignments.length === 0 ? (
-                      <Text style={styles.draft}>— Sem pessoas escaladas</Text>
+                      <Text style={styles.draft}>
+                        🟡 Escala em rascunho
+                      </Text>
                     ) : (
                       schedule.assignments.map((a) => (
                         <Text key={a.personId} style={styles.person}>

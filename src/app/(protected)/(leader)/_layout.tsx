@@ -56,7 +56,7 @@ export default function LeaderLayout() {
         options={{
           title: "Escalas ministérios",
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="documents-outline" size={size} color={color} />
+            <Ionicons name="calendar-outline" size={size} color={color} />
           ),
         }}
       />

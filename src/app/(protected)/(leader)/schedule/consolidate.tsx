@@ -14,10 +14,19 @@ import { AppHeader } from "@/components/layout/AppHeader";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 
-import { listenMembershipsByUser } from "@/services/memberships";
-import { listenAllSchedulesByMonth, Schedule } from "@/services/schedule/schedules";
+import {
+  listenMembershipsByUser,
+  Membership,
+} from "@/services/memberships";
+import {
+  listenAllSchedulesByMonth,
+  Schedule,
+} from "@/services/schedule/schedules";
 import { getPeopleNamesByIds } from "@/services/people";
 import { getMinistryMap } from "@/services/ministries";
+import {
+  getGeneralScheduleByMonth,
+} from "@/services/schedule/generalSchedules";
 
 /* =========================
    HELPERS
@@ -41,8 +50,8 @@ function formatDatePtBr(dateKey: string) {
   });
 }
 
-function monthLabel(year: number, month: number) {
-  return new Date(year, month, 1).toLocaleDateString("pt-BR", {
+function monthLabel(year: number, jsMonth: number) {
+  return new Date(year, jsMonth, 1).toLocaleDateString("pt-BR", {
     month: "long",
     year: "numeric",
   });
@@ -78,21 +87,20 @@ function groupByService(schedules: Schedule[]) {
    SCREEN
 ========================= */
 
-export default function PublishedScheduleScreen() {
+export default function LeaderPublishedScheduleScreen() {
   const { profile } = useAuth();
   const { theme } = useTheme();
 
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
-  const [month, setMonth] = useState(today.getMonth() + 1);
+  const [month, setMonth] = useState(today.getMonth()); // JS 0–11
 
   const [loading, setLoading] = useState(true);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
-  const [ministryIds, setMinistryIds] = useState<string[]>([]);
+  const [memberships, setMemberships] = useState<Membership[]>([]);
   const [peopleNames, setPeopleNames] = useState<Record<string, string>>({});
   const [ministries, setMinistries] = useState<Record<string, string>>({});
-
-  const isAdmin = profile?.roles.includes("admin") ?? false;
+  const [generalPublished, setGeneralPublished] = useState(false);
 
   /* =========================
      MEMBERSHIPS
@@ -100,10 +108,20 @@ export default function PublishedScheduleScreen() {
 
   useEffect(() => {
     if (!profile?.uid) return;
-    return listenMembershipsByUser(profile.uid, (items) =>
-      setMinistryIds(items.map((m) => m.ministryId))
-    );
+    return listenMembershipsByUser(profile.uid, setMemberships);
   }, [profile?.uid]);
+
+  /* =========================
+     LEADER MINISTRIES
+  ========================= */
+
+  const leaderMinistryIds = useMemo(
+    () =>
+      memberships
+        .filter((m) => m.role === "leader" && m.active)
+        .map((m) => m.ministryId),
+    [memberships]
+  );
 
   /* =========================
      LOAD DATA (MONTH)
@@ -112,56 +130,71 @@ export default function PublishedScheduleScreen() {
   useEffect(() => {
     if (!profile) return;
 
-    const dbMonth = month;
-
     setLoading(true);
 
-    const unsubscribe = listenAllSchedulesByMonth(
-      year,
-      dbMonth,
-      async (allSchedules) => {
-        const visible = isAdmin
-          ? allSchedules
-          : allSchedules.filter((s) =>
-            ministryIds.includes(s.ministryId)
+    let unsubscribe: () => void;
+
+    async function load() {
+      // 🔥 verifica escala geral
+      const general = await getGeneralScheduleByMonth(year, month + 1);
+      setGeneralPublished(!!general);
+
+      unsubscribe = listenAllSchedulesByMonth(
+        year,
+        month + 1,
+        async (allSchedules) => {
+          const visible = general
+            ? allSchedules // 👑 geral publicada → vê tudo
+            : allSchedules.filter((s) =>
+                leaderMinistryIds.includes(s.ministryId)
+              );
+
+          setSchedules(visible);
+
+          const personIds = Array.from(
+            new Set(
+              visible.flatMap((s) =>
+                s.assignments.map((a) => a.personId)
+              )
+            )
           );
 
-        setSchedules(visible);
+          const [names, ministryMap] = await Promise.all([
+            getPeopleNamesByIds(personIds),
+            getMinistryMap(),
+          ]);
 
-        const personIds = Array.from(
-          new Set(
-            visible.flatMap((s) =>
-              s.assignments.map((a) => a.personId)
-            )
-          )
-        );
+          setPeopleNames(names);
+          setMinistries(ministryMap);
 
-        const [names, ministryMap] = await Promise.all([
-          getPeopleNamesByIds(personIds),
-          getMinistryMap(),
-        ]);
+          setLoading(false);
+        }
+      );
+    }
 
-        setPeopleNames(names);
-        setMinistries(ministryMap);
+    load();
 
-        setLoading(false);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [profile, year, month, ministryIds.join(","), isAdmin]);
+    return () => {
+      unsubscribe && unsubscribe();
+    };
+  }, [profile, year, month, leaderMinistryIds.join(",")]);
 
   /* =========================
      VIEW MODEL
   ========================= */
 
-  const grouped = useMemo(() => groupByService(schedules), [schedules]);
+  const grouped = useMemo(
+    () => groupByService(schedules),
+    [schedules]
+  );
 
   const ministryList = useMemo(
     () =>
       Object.entries(ministries)
         .map(([id, name]) => ({ id, name }))
-        .sort((a, b) => a.name.localeCompare(b.name, "pt-BR")),
+        .sort((a, b) =>
+          a.name.localeCompare(b.name, "pt-BR")
+        ),
     [ministries]
   );
 
@@ -176,7 +209,7 @@ export default function PublishedScheduleScreen() {
   }
 
   /* =========================
-     STYLES (UX COPIADO)
+     STYLES
   ========================= */
 
   const styles = useMemo(
@@ -220,10 +253,6 @@ export default function PublishedScheduleScreen() {
           backgroundColor: theme.colors.surface,
           borderColor: theme.colors.border,
         },
-        headerRow: {
-          flexDirection: "row",
-          justifyContent: "space-between",
-        },
         cultTitle: {
           fontSize: 15,
           fontWeight: "700",
@@ -253,7 +282,6 @@ export default function PublishedScheduleScreen() {
           marginTop: 32,
           textAlign: "center",
           color: theme.colors.textMuted,
-          lineHeight: 20,
         },
       }),
     [theme]
@@ -265,16 +293,22 @@ export default function PublishedScheduleScreen() {
 
   return (
     <AppScreen>
-      <AppHeader title="Escalas Publicadas" back />
+      <AppHeader
+        title={
+          generalPublished
+            ? "Escala Geral Publicada"
+            : "Escalas dos Ministérios"
+        }
+        back
+      />
 
-      {/* NAV MÊS */}
       <View style={styles.monthHeader}>
         <Pressable onPress={() => goTo(-1)} style={styles.navBtn}>
           <Text style={styles.navText}>◀</Text>
         </Pressable>
 
         <Text style={styles.monthTitle}>
-          {monthLabel(year, month)}
+          {monthLabel(year, month + 1)}
         </Text>
 
         <Pressable onPress={() => goTo(1)} style={styles.navBtn}>
@@ -292,25 +326,26 @@ export default function PublishedScheduleScreen() {
         <ScrollView style={styles.wrapper}>
           {grouped.map(({ key, items, ref }) => (
             <View key={key} style={styles.card}>
-              <View style={styles.headerRow}>
-                <Text style={styles.cultTitle}>
-                  {ref.serviceLabel} • {formatDatePtBr(ref.serviceDate)}
-                </Text>
-              </View>
+              <Text style={styles.cultTitle}>
+                {ref.serviceLabel} •{" "}
+                {formatDatePtBr(ref.serviceDate)}
+              </Text>
 
               {ministryList.map((m) => {
                 const schedule = items.find(
                   (s) => s.ministryId === m.id
                 );
 
+                if (!schedule && !generalPublished) return null;
+
                 return (
                   <View key={m.id} style={styles.block}>
                     <Text style={styles.ministry}>{m.name}</Text>
 
                     {!schedule || schedule.status === "draft" ? (
-                      <Text style={styles.draft}>🟡 Escala em rascunho</Text>
-                    ) : schedule.assignments.length === 0 ? (
-                      <Text style={styles.draft}>— Sem pessoas escaladas</Text>
+                      <Text style={styles.draft}>
+                        🟡 Escala em rascunho
+                      </Text>
                     ) : (
                       schedule.assignments.map((a) => (
                         <Text key={a.personId} style={styles.person}>

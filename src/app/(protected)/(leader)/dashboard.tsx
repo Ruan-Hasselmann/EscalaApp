@@ -59,7 +59,7 @@ export default function LeaderDashboard() {
         <ActionListItem
           icon={
             <Ionicons
-              name="documents-outline"
+              name="calendar-outline"
               size={iconSize}
               color={iconColor}
             />

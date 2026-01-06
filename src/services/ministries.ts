@@ -3,6 +3,7 @@ import {
   doc,
   getDocs,
   onSnapshot,
+  query,
   updateDoc,
 } from "firebase/firestore";
 import { db } from "./firebase";
@@ -76,4 +77,20 @@ export async function getMinistryMap(): Promise<Record<string, string>> {
   });
 
   return map;
+}
+
+export function listenMinistriesSchedule(
+  callback: (map: Record<string, string>) => void
+) {
+  const q = query(collection(db, "ministries"));
+
+  return onSnapshot(q, (snap) => {
+    const map: Record<string, string> = {};
+
+    snap.docs.forEach((doc) => {
+      map[doc.id] = doc.data().name;
+    });
+
+    callback(map);
+  });
 }
