@@ -5,8 +5,8 @@ import { useTheme } from "@/contexts/ThemeContext";
 type Props = {
   title: string;
   description?: string;
-  icon?: ReactNode;   // ✅ agora aceita Ionicons, emoji, qualquer componente
-  right?: ReactNode;  // ✅ evoluído (seta, badge, ícone, etc.)
+  icon?: ReactNode;   // aceita ícone, emoji ou componente
+  right?: ReactNode;  // seta, badge, ícone, etc.
   onPress?: () => void;
 };
 
@@ -14,19 +14,26 @@ export function ActionListItem({
   title,
   description,
   icon,
-  right = "›",
+  right = "›", // indicador padrão de navegação
   onPress,
 }: Props) {
   const { theme } = useTheme();
+  const isClickable = typeof onPress === "function";
 
   return (
     <Pressable
       onPress={onPress}
+      disabled={!isClickable}
+      accessibilityRole={isClickable ? "button" : undefined}
+      accessibilityLabel={title}
+      accessibilityHint={description}
       style={({ pressed }) => [
         styles.container,
         {
           backgroundColor: theme.colors.surface,
-          opacity: pressed ? 0.85 : 1,
+          opacity: pressed && isClickable ? 0.85 : 1,
+          transform:
+            pressed && isClickable ? [{ scale: 0.98 }] : undefined,
         },
       ]}
     >

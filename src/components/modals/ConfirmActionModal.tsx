@@ -33,9 +33,21 @@ export function ConfirmActionModal({
   const { theme } = useTheme();
 
   return (
-    <Modal visible={visible} transparent animationType="fade">
-      <View style={styles.overlay}>
-        <View
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      accessibilityViewIsModal
+    >
+      {/* OVERLAY */}
+      <Pressable
+        style={styles.overlay}
+        onPress={onCancel}
+        accessibilityRole="button"
+      >
+        {/* MODAL */}
+        <Pressable
+          onPress={() => {}}
           style={[
             styles.modal,
             {
@@ -43,6 +55,7 @@ export function ConfirmActionModal({
               borderColor: theme.colors.border,
             },
           ]}
+          accessibilityRole="alert"
         >
           {/* TITLE */}
           <Text
@@ -72,10 +85,12 @@ export function ConfirmActionModal({
           <View style={styles.actions}>
             <Pressable
               onPress={onCancel}
-              style={[
+              accessibilityRole="button"
+              style={({ pressed }) => [
                 styles.button,
                 {
                   borderColor: theme.colors.border,
+                  opacity: pressed ? 0.85 : 1,
                 },
               ]}
             >
@@ -86,12 +101,15 @@ export function ConfirmActionModal({
 
             <Pressable
               onPress={onConfirm}
-              style={[
+              accessibilityRole="button"
+              accessibilityHint={description}
+              style={({ pressed }) => [
                 styles.button,
                 {
                   backgroundColor: danger
                     ? theme.colors.danger
                     : theme.colors.primary,
+                  opacity: pressed ? 0.9 : 1,
                 },
               ]}
             >
@@ -105,8 +123,8 @@ export function ConfirmActionModal({
               </Text>
             </Pressable>
           </View>
-        </View>
-      </View>
+        </Pressable>
+      </Pressable>
     </Modal>
   );
 }

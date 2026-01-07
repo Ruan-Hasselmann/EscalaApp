@@ -33,25 +33,31 @@ import { listenUsers, AppUser } from "@/services/users";
 ========================= */
 
 function firstName(name?: string) {
-  if (!name) return "";
-  return name.split(" ")[0];
+  return name?.split(" ")[0] ?? "—";
 }
 
 function formatDatePtBr(dateKey: string) {
   const [y, m, d] = dateKey.split("-").map(Number);
-  const date = new Date(y, m - 1, d);
-
-  return date.toLocaleDateString("pt-BR", {
+  return new Date(y, m - 1, d).toLocaleDateString("pt-BR", {
     weekday: "long",
     day: "2-digit",
     month: "long",
   });
 }
 
-function getNextMonth() {
+/**
+ * 🔥 Domínio do app:
+ * sempre trabalhar com o MÊS ALVO (mês seguinte)
+ * e salvar month como 1–12
+ */
+function getTargetMonth() {
   const now = new Date();
-  const d = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-  return { year: d.getFullYear(), month: d.getMonth() };
+  const target = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+  return {
+    year: target.getFullYear(),
+    month: target.getMonth() + 1, // ✅ 1–12
+  };
 }
 
 type ConfirmTarget =
@@ -67,7 +73,7 @@ export default function LeaderPublishedSchedules() {
   const { theme } = useTheme();
   const { profile } = useAuth();
 
-  const { year, month } = getNextMonth();
+  const { year, month } = getTargetMonth();
 
   const [ministries, setMinistries] = useState<Ministry[]>([]);
   const [memberships, setMemberships] = useState<Membership[]>([]);
@@ -85,16 +91,25 @@ export default function LeaderPublishedSchedules() {
   useEffect(() => {
     if (!profile?.uid) return;
 
-    const u1 = listenMembershipsByUser(profile.uid, setMemberships);
-    const u2 = listenSchedulesByMonth(year, month, setSchedules);
-    const u3 = listenUsers(setUsers);
+    const unsubMemberships = listenMembershipsByUser(
+      profile.uid,
+      setMemberships
+    );
+
+    const unsubSchedules = listenSchedulesByMonth(
+      year,
+      month,
+      setSchedules
+    );
+
+    const unsubUsers = listenUsers(setUsers);
 
     listMinistries().then(setMinistries);
 
     return () => {
-      u1();
-      u2();
-      u3();
+      unsubMemberships();
+      unsubSchedules();
+      unsubUsers();
     };
   }, [profile?.uid, year, month]);
 
@@ -114,23 +129,27 @@ export default function LeaderPublishedSchedules() {
     return map;
   }, [ministries]);
 
-  const leaderMinistryIds = useMemo(() => {
-    return memberships
-      .filter((m) => m.role === "leader" && m.active)
-      .map((m) => m.ministryId);
-  }, [memberships]);
+  const leaderMinistryIds = useMemo(
+    () =>
+      memberships
+        .filter((m) => m.role === "leader" && m.active)
+        .map((m) => m.ministryId),
+    [memberships]
+  );
 
   /* =========================
-     ONLY PUBLISHED
+     ONLY PUBLISHED (SAFE)
   ========================= */
 
-  const published = useMemo(() => {
-    return schedules.filter(
-      (s) =>
-        s.status === "published" &&
-        leaderMinistryIds.includes(s.ministryId)
-    );
-  }, [schedules, leaderMinistryIds]);
+  const published = useMemo(
+    () =>
+      schedules.filter(
+        (s) =>
+          s.status === "published" &&
+          leaderMinistryIds.includes(s.ministryId)
+      ),
+    [schedules, leaderMinistryIds]
+  );
 
   /* =========================
      GROUP BY SERVICE
@@ -138,16 +157,18 @@ export default function LeaderPublishedSchedules() {
 
   const grouped = useMemo(() => {
     const map: Record<string, Schedule[]> = {};
+
     published.forEach((s) => {
       const key = `${s.serviceDate}__${s.serviceId}`;
       map[key] ??= [];
       map[key].push(s);
     });
+
     return map;
   }, [published]);
 
   /* =========================
-     ACTION
+     ACTIONS
   ========================= */
 
   async function handleConfirmRevert() {
@@ -167,7 +188,7 @@ export default function LeaderPublishedSchedules() {
 
   return (
     <AppScreen>
-      <AppHeader title="📅 Escalas publicadas" back/>
+      <AppHeader title="📅 Escalas publicadas" back />
 
       <ScrollView style={styles.wrapper}>
         {published.length > 0 && (
@@ -204,7 +225,8 @@ export default function LeaderPublishedSchedules() {
               lineHeight: 20,
             }}
           >
-            Nenhuma escala publicada para este mês.{"\n"}
+            Nenhuma escala publicada para este mês.
+            {"\n"}
             As escalas aparecerão aqui após a publicação.
           </Text>
         )}
@@ -223,22 +245,18 @@ export default function LeaderPublishedSchedules() {
                 },
               ]}
             >
-              {/* HEADER */}
-              <View style={styles.headerRow}>
-                <Text
-                  style={{
-                    color: theme.colors.text,
-                    fontWeight: "700",
-                    fontSize: 15,
-                    textTransform: "capitalize",
-                  }}
-                >
-                  {ref.serviceLabel} •{" "}
-                  {formatDatePtBr(ref.serviceDate)}
-                </Text>
-              </View>
+              <Text
+                style={{
+                  color: theme.colors.text,
+                  fontWeight: "700",
+                  fontSize: 15,
+                  textTransform: "capitalize",
+                }}
+              >
+                {ref.serviceLabel} •{" "}
+                {formatDatePtBr(ref.serviceDate)}
+              </Text>
 
-              {/* MINISTRIES */}
               {items
                 .slice()
                 .sort((a, b) =>
@@ -272,6 +290,7 @@ export default function LeaderPublishedSchedules() {
                     ))}
                   </View>
                 ))}
+
               <Pressable
                 onPress={() => {
                   setConfirmTarget({
@@ -282,10 +301,7 @@ export default function LeaderPublishedSchedules() {
                 }}
                 style={[
                   styles.editBtn,
-                  {
-                    borderColor: theme.colors.danger,
-                    alignItems: "center"
-                  },
+                  { borderColor: theme.colors.danger },
                 ]}
               >
                 <Text
@@ -303,7 +319,6 @@ export default function LeaderPublishedSchedules() {
         })}
       </ScrollView>
 
-      {/* CONFIRM MODAL */}
       <ConfirmActionModal
         visible={confirmOpen}
         title="Voltar para rascunho"
@@ -349,19 +364,16 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     gap: 10,
   },
-  headerRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
   block: {
     marginTop: 6,
     paddingLeft: 6,
   },
   editBtn: {
+    marginTop: 6,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 10,
     borderWidth: 1,
+    alignItems: "center",
   },
 });

@@ -15,7 +15,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 
 import {
-  listenAllSchedulesByMonth,
+  listenSchedulesByMonth,
   Schedule,
 } from "@/services/schedule/schedules";
 import {
@@ -23,7 +23,7 @@ import {
   listenGeneralScheduleByMonth,
 } from "@/services/schedule/generalSchedules";
 import { getPeopleNamesByIds } from "@/services/people";
-import { getMinistryMap, listenMinistriesSchedule } from "@/services/ministries";
+import { listenMinistriesSchedule } from "@/services/ministries";
 
 /* =========================
    HELPERS
@@ -107,16 +107,16 @@ export default function AdminPublishedSchedulesScreen() {
 
     setLoading(true);
 
-    const unsubSchedules = listenAllSchedulesByMonth(
+    const unsubSchedules = listenSchedulesByMonth(
       year,
       month + 1,
-      async (allSchedules) => {
+      async (allSchedules: Schedule[]) => {
         setSchedules(allSchedules);
 
         const personIds = Array.from(
           new Set(
             allSchedules.flatMap((s) =>
-              s.assignments.map((a) => a.personId)
+              s.assignments.map((a) => a.userId)
             )
           )
         );
@@ -143,7 +143,6 @@ export default function AdminPublishedSchedulesScreen() {
     };
   }, [profile, year, month]);
 
-
   /* =========================
      VIEW MODEL
   ========================= */
@@ -159,7 +158,7 @@ export default function AdminPublishedSchedulesScreen() {
   );
 
   /* =========================
-     🔥 VALIDATION (CORRETA)
+     VALIDATION
   ========================= */
 
   const validation = useMemo(() => {
@@ -377,8 +376,8 @@ export default function AdminPublishedSchedulesScreen() {
                       </Text>
                     ) : (
                       schedule.assignments.map((a) => (
-                        <Text key={a.personId} style={styles.person}>
-                          • {firstName(peopleNames[a.personId])}
+                        <Text key={a.userId} style={styles.person}>
+                          • {firstName(peopleNames[a.userId])}
                         </Text>
                       ))
                     )}

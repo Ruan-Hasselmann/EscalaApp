@@ -1,13 +1,14 @@
 import { Text, StyleSheet } from "react-native";
 import { useRouter } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 
 import { AppScreen } from "@/components/layout/AppScreen";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { ActionList } from "@/components/ui/ActionList";
 import { ActionListItem } from "@/components/ui/ActionListItem";
+
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
-import { Ionicons } from "@expo/vector-icons";
 
 export default function LeaderDashboard() {
   const { profile } = useAuth();
@@ -40,9 +41,10 @@ export default function LeaderDashboard() {
             />
           }
           title="Escala geral"
-          description="Abrir tela de escalas publicadas"
+          description="Visualizar escalas publicadas"
           onPress={() => router.push("/schedule/consolidate")}
         />
+
         <ActionListItem
           icon={
             <Ionicons
@@ -52,7 +54,7 @@ export default function LeaderDashboard() {
             />
           }
           title="Gerar escala"
-          description="Gerenciar escalas"
+          description="Criar e gerenciar escalas do ministério"
           onPress={() => router.push("/schedule/generate")}
         />
 
@@ -64,8 +66,8 @@ export default function LeaderDashboard() {
               color={iconColor}
             />
           }
-          title="Escalas ministério"
-          description="Escalas publicadas do ministério"
+          title="Escalas do ministério"
+          description="Escalas publicadas do seu ministério"
           onPress={() => router.push("/schedule/published")}
         />
       </ActionList>

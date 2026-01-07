@@ -15,8 +15,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { listMinistries, Ministry } from "@/services/ministries";
 import { listenUsers, AppUser } from "@/services/users";
 import {
+  listenMemberships,
   listenMembershipsByUser,
-  listenMembershipsByMinistry,
   Membership,
 } from "@/services/memberships";
 
@@ -26,25 +26,16 @@ import {
   Schedule,
   updateScheduleAssignment,
 } from "@/services/schedule/schedules";
+
 import {
   publishServiceSchedules,
   publishAllDraftSchedules,
 } from "@/services/schedule/schedulePublish";
 
 import {
-  MemberAvailability,
-  MemberAvailabilityStatus,
-} from "@/services/memberAvailability";
-
-import {
-  collection,
-  getDocs,
-  query,
-  where,
-} from "firebase/firestore";
-import { db } from "@/services/firebase";
-
-import { EditScheduleModal } from "@/components/modals/EditScheduleModal";
+  EditableMember,
+  EditScheduleModal,
+} from "@/components/modals/EditScheduleModal";
 
 /* =========================
    HELPERS
@@ -60,49 +51,18 @@ function formatServiceDate(dateKey: string) {
   });
 }
 
-function firstName(name: string) {
-  return name.trim().split(" ")[0];
+function firstName(name?: string) {
+  return name?.trim().split(" ")[0] ?? "—";
 }
 
 function getNextMonth() {
   const now = new Date();
   const d = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-  return { year: d.getFullYear(), month: d.getMonth() };
-}
 
-async function fetchMemberAvailabilityForUsersByMonth(
-  userIds: string[],
-  year: number,
-  month: number
-): Promise<MemberAvailability[]> {
-  if (userIds.length === 0) return [];
-
-  const chunks: string[][] = [];
-  for (let i = 0; i < userIds.length; i += 10) {
-    chunks.push(userIds.slice(i, i + 10));
-  }
-
-  const all: MemberAvailability[] = [];
-
-  for (const chunk of chunks) {
-    const q = query(
-      collection(db, "memberAvailability"),
-      where("userId", "in", chunk),
-      where("year", "==", year),
-      where("month", "==", month)
-    );
-
-    const snap = await getDocs(q);
-
-    const items: MemberAvailability[] = snap.docs.map((d) => ({
-      id: d.id,
-      ...(d.data() as Omit<MemberAvailability, "id">),
-    }));
-
-    all.push(...items);
-  }
-
-  return all;
+  return {
+    year: d.getFullYear(),
+    month: d.getMonth() + 1,
+  };
 }
 
 /* =========================
@@ -118,20 +78,22 @@ export default function LeaderGenerateSchedule() {
   const [ministries, setMinistries] = useState<Ministry[]>([]);
   const [users, setUsers] = useState<AppUser[]>([]);
   const [myMemberships, setMyMemberships] = useState<Membership[]>([]);
-  const [ministryMemberships, setMinistryMemberships] =
-    useState<Membership[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
 
-  const [availabilities, setAvailabilities] =
-    useState<MemberAvailability[]>([]);
-  const [loadingAvailability, setLoadingAvailability] = useState(false);
-
   const [generating, setGenerating] = useState(false);
-  const [editOpen, setEditOpen] = useState(false);
-  const [selectedSchedule, setSelectedSchedule] =
-    useState<Schedule | null>(null);
-  const [selectedPersonId, setSelectedPersonId] =
-    useState<string | null>(null);
+  const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
+
+  const [editTarget, setEditTarget] = useState<{
+    schedule: Schedule;
+  } | null>(null);
+
+  const [allMemberships, setAllMemberships] = useState<Membership[]>([]);
+
+  useEffect(() => {
+    const unsub = listenMemberships(setAllMemberships);
+    return unsub;
+  }, []);
+
 
   /* =========================
      LOAD BASE DATA
@@ -153,58 +115,17 @@ export default function LeaderGenerateSchedule() {
     };
   }, [profile?.uid, year, month]);
 
-  /* =========================
-     LOAD MEMBERS OF SELECTED MINISTRY
-  ========================= */
-
   useEffect(() => {
-    if (!selectedSchedule) return;
-
-    return listenMembershipsByMinistry(
-      selectedSchedule.ministryId,
-      setMinistryMemberships
-    );
-  }, [selectedSchedule]);
-
-  /* =========================
-     LOAD AVAILABILITY (MODAL)
-  ========================= */
-
-  useEffect(() => {
-    const shouldLoad =
-      editOpen &&
-      !!selectedSchedule &&
-      ministryMemberships.length > 0;
-
-    if (!shouldLoad) return;
-
-    let cancelled = false;
-
-    async function load() {
-      try {
-        setLoadingAvailability(true);
-
-        const memberIds = ministryMemberships
-          .filter((m) => m.active)
-          .map((m) => m.userId);
-
-        const items = await fetchMemberAvailabilityForUsersByMonth(
-          memberIds,
-          year,
-          month
-        );
-
-        if (!cancelled) setAvailabilities(items);
-      } finally {
-        if (!cancelled) setLoadingAvailability(false);
-      }
+    if (!editTarget) {
+      setSelectedPersonId(null);
+      return;
     }
 
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, [editOpen, selectedSchedule, ministryMemberships, year, month]);
+    setSelectedPersonId(
+      editTarget.schedule.assignments[0]?.userId ?? null
+    );
+  }, [editTarget]);
+
 
   /* =========================
      MAPS
@@ -222,31 +143,27 @@ export default function LeaderGenerateSchedule() {
     return map;
   }, [ministries]);
 
-  const leaderMinistryIds = useMemo(() => {
-    return myMemberships
-      .filter((m) => m.role === "leader" && m.active)
-      .map((m) => m.ministryId);
-  }, [myMemberships]);
-
-  const availabilityMap = useMemo(() => {
-    const map = new Map<string, MemberAvailabilityStatus>();
-    for (const a of availabilities) {
-      map.set(`${a.userId}__${a.dateKey}__${a.serviceId}`, a.status);
-    }
-    return map;
-  }, [availabilities]);
+  const leaderMinistryIds = useMemo(
+    () =>
+      myMemberships
+        .filter((m) => m.role === "leader" && m.active)
+        .map((m) => m.ministryId),
+    [myMemberships]
+  );
 
   /* =========================
      DRAFT SCHEDULES
   ========================= */
 
-  const draftSchedules = useMemo(() => {
-    return schedules.filter(
-      (s) =>
-        s.status === "draft" &&
-        leaderMinistryIds.includes(s.ministryId)
-    );
-  }, [schedules, leaderMinistryIds]);
+  const draftSchedules = useMemo(
+    () =>
+      schedules.filter(
+        (s) =>
+          s.status === "draft" &&
+          leaderMinistryIds.includes(s.ministryId)
+      ),
+    [schedules, leaderMinistryIds]
+  );
 
   const grouped = useMemo(() => {
     const map: Record<string, Schedule[]> = {};
@@ -257,63 +174,6 @@ export default function LeaderGenerateSchedule() {
     });
     return map;
   }, [draftSchedules]);
-
-  /* =========================
-     MEMBERS FOR MODAL
-  ========================= */
-
-  const membersDoMinisterio = useMemo(() => {
-    if (!selectedSchedule) return [];
-
-    const serviceKey = `${selectedSchedule.serviceDate}__${selectedSchedule.serviceId}`;
-
-    // 🔥 nomes já escalados no culto (draft + published)
-    const assignedNames = schedules
-      .filter(
-        (s) =>
-          s.serviceDate === selectedSchedule.serviceDate &&
-          s.serviceId === selectedSchedule.serviceId
-      )
-      .flatMap((s) =>
-        s.assignments.map((a) =>
-          firstName(userMap[a.personId]?.name ?? "").toLowerCase()
-        )
-      );
-
-    return ministryMemberships
-      .filter((m) => m.active)
-      .filter((m) => {
-        const user = userMap[m.userId];
-        if (!user) return false;
-
-        // 🔒 disponibilidade: SÓ AVAILABLE
-        const availabilityKey = `${m.userId}__${selectedSchedule.serviceDate}__${selectedSchedule.serviceId}`;
-        if (availabilityMap.get(availabilityKey) !== "available") return false;
-
-        const myName = firstName(user.name).toLowerCase();
-
-        // 🔥 conflito soberano Ruan x Fabiano
-        if (
-          (myName === "ruan" && assignedNames.includes("fabiano")) ||
-          (myName === "fabiano" && assignedNames.includes("ruan"))
-        ) {
-          return false;
-        }
-
-        return true;
-      })
-      .map((m) => ({
-        id: m.userId,
-        name: userMap[m.userId]?.name ?? m.userId,
-        status: "confirmed" as const,
-      }));
-  }, [
-    selectedSchedule,
-    ministryMemberships,
-    schedules,
-    availabilityMap,
-    userMap,
-  ]);
 
   /* =========================
      ACTIONS
@@ -336,15 +196,36 @@ export default function LeaderGenerateSchedule() {
     }
   }
 
+  function buildEditableMembers(schedule: Schedule): EditableMember[] {
+    const ministryId = schedule.ministryId;
+
+    const memberIds = allMemberships
+      .filter(
+        (m) =>
+          m.ministryId === ministryId &&
+          m.active
+      )
+      .map((m) => m.userId);
+
+    return users
+      .filter((u) => memberIds.includes(u.id))
+      .map((u) => ({
+        id: u.id,
+        name: u.name,
+        status: "confirmed",
+      }));
+  }
+
   /* =========================
      RENDER
   ========================= */
 
   return (
     <AppScreen>
-      <AppHeader title="🗓️ Gerar & revisar escala" back/>
+      <AppHeader title="🗓️ Gerar & revisar escala" back />
 
       <View style={styles.wrapper}>
+        {/* GERAR */}
         <Pressable
           onPress={handleGenerate}
           disabled={generating}
@@ -370,26 +251,23 @@ export default function LeaderGenerateSchedule() {
           )}
         </Pressable>
 
+        {/* PUBLICAR TODA */}
         <Pressable
+          disabled={draftSchedules.length === 0}
           onPress={() =>
             publishAllDraftSchedules(year, month, leaderMinistryIds)
           }
-          disabled={draftSchedules.length === 0}
           style={[
             styles.publishAllBtn,
             { borderColor: theme.colors.border },
           ]}
         >
-          <Text
-            style={{
-              color: theme.colors.text,
-              fontWeight: "600",
-            }}
-          >
+          <Text style={{ color: theme.colors.text, fontWeight: "600" }}>
             Publicar toda a escala
           </Text>
         </Pressable>
 
+        {/* LISTA */}
         {Object.entries(grouped).map(([key, items]) => {
           const ref = items[0];
 
@@ -398,18 +276,16 @@ export default function LeaderGenerateSchedule() {
               key={key}
               style={[
                 styles.block,
-                {
-                  backgroundColor: theme.colors.surface,
-                  borderColor: theme.colors.border,
-                },
+                { backgroundColor: theme.colors.surface },
               ]}
             >
               <View style={styles.headerRow}>
                 <Text
                   style={{
+                    flex: 1,
                     color: theme.colors.text,
                     fontWeight: "600",
-                    flex: 1,
+                    textTransform: "capitalize"
                   }}
                 >
                   {formatServiceDate(ref.serviceDate)} • {ref.serviceLabel}
@@ -425,14 +301,13 @@ export default function LeaderGenerateSchedule() {
                   }
                   style={[
                     styles.editBtn,
-                    { borderColor: theme.colors.border },
+                    { borderColor: theme.colors.primary },
                   ]}
                 >
                   <Text
                     style={{
                       color: theme.colors.primary,
                       fontWeight: "600",
-                      fontSize: 13,
                     }}
                   >
                     Publicar
@@ -442,80 +317,40 @@ export default function LeaderGenerateSchedule() {
 
               {items.map((s) => (
                 <View key={s.id} style={styles.assignmentRow}>
-                  <View style={{ flex: 1 }}>
-                    <Text
-                      style={{
-                        color: theme.colors.textMuted,
-                        fontSize: 13,
-                      }}
-                    >
+                  <View style={styles.rowHeader}>
+                    <Text style={{ color: theme.colors.textMuted }}>
                       {ministryMap[s.ministryId]?.name}
                     </Text>
 
-                    {s.assignments.map((a) => {
-                      const assignmentFlags = [
-                        ...(s.flags ?? []),
-                        //...(a.flags ?? []),
-                      ];
+                    <Pressable
+                      onPress={() => {
+                        const currentAssigned = s.assignments[0]?.userId ?? null;
 
-                      return (
-                        <View key={a.personId}>
-                          <Text
-                            style={{
-                              color: theme.colors.text,
-                              fontSize: 14,
-                            }}
-                          >
-                            •{" "}
-                            {userMap[a.personId]
-                              ? firstName(userMap[a.personId].name)
-                              : a.personId}
-                          </Text>
+                        setEditTarget({
+                          schedule: s,
+                        });
 
-                          {assignmentFlags.map((f, idx) => (
-                            <Text
-                              key={idx}
-                              style={{
-                                color: theme.colors.textMuted,
-                                fontSize: 12,
-                                marginLeft: 12,
-                              }}
-                            >
-                              ⚠{" "}
-                              {f.type === "overload" &&
-                                "Sobrecarga no mês"}
-                              {f.type === "conflict_ministry_priority" &&
-                                "Já escalado em outro ministério neste culto"}
-                            </Text>
-                          ))}
-                        </View>
-                      );
-                    })}
+                        setSelectedPersonId(currentAssigned);
+                      }}
+                      style={[
+                        styles.editBtn,
+                        { borderColor: theme.colors.border },
+                      ]}
+                    >
+                      <Text style={{ color: theme.colors.text }}>
+                        Editar
+                      </Text>
+                    </Pressable>
                   </View>
 
-                  <Pressable
-                    onPress={() => {
-                      setSelectedSchedule(s);
-                      setSelectedPersonId(
-                        s.assignments[0]?.personId ?? null
-                      );
-                      setEditOpen(true);
-                    }}
-                    style={[
-                      styles.editBtn,
-                      { borderColor: theme.colors.border },
-                    ]}
-                  >
+                  {s.assignments.map((a) => (
                     <Text
-                      style={{
-                        color: theme.colors.primary,
-                        fontWeight: "600",
-                        fontSize: 13,
-                      }}
+                      key={a.userId}
+                      style={{ color: theme.colors.text }}
                     >
-                      Editar
+                      • {firstName(userMap[a.userId]?.name)}
                     </Text>
-                  </Pressable>
+                  ))}
                 </View>
               ))}
             </View>
@@ -523,34 +358,36 @@ export default function LeaderGenerateSchedule() {
         })}
       </View>
 
-      <EditScheduleModal
-        visible={editOpen}
-        ministryName={
-          ministryMap[selectedSchedule?.ministryId ?? ""]?.name ?? ""
-        }
-        serviceLabel={selectedSchedule?.serviceLabel ?? ""}
-        serviceDate={selectedSchedule?.serviceDate ?? ""}
-        members={membersDoMinisterio}
-        selectedPersonId={selectedPersonId}
-        onSelect={setSelectedPersonId}
-        onCancel={() => {
-          setEditOpen(false);
-          setSelectedSchedule(null);
-          setAvailabilities([]);
-        }}
-        onSave={async () => {
-          if (!selectedSchedule || !selectedPersonId) return;
+      {/* MODAL */}
+      {editTarget && (
+        <EditScheduleModal
+          visible
+          ministryName={
+            ministryMap[editTarget.schedule.ministryId]?.name ?? "Ministério"
+          }
+          serviceDate={editTarget.schedule.serviceDate}
+          serviceLabel={editTarget.schedule.serviceLabel}
+          members={buildEditableMembers(editTarget.schedule)}
+          selectedPersonId={selectedPersonId}
+          onSelect={setSelectedPersonId}
+          onCancel={() => {
+            setEditTarget(null);
+            setSelectedPersonId(null);
+          }}
+          onSave={async () => {
+            if (!selectedPersonId) return;
 
-          await updateScheduleAssignment(
-            selectedSchedule.id,
-            selectedPersonId
-          );
+            await updateScheduleAssignment(
+              editTarget.schedule.id,
+              selectedPersonId,
+              editTarget.schedule.ministryId
+            );
 
-          setEditOpen(false);
-          setSelectedSchedule(null);
-          setAvailabilities([]);
-        }}
-      />
+            setEditTarget(null);
+            setSelectedPersonId(null);
+          }}
+        />
+      )}
     </AppScreen>
   );
 }
@@ -572,6 +409,12 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
   },
+  publishAllBtn: {
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: "center",
+  },
   block: {
     borderWidth: 1,
     borderRadius: 14,
@@ -584,15 +427,12 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   assignmentRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
     marginTop: 6,
+    gap: 4,
   },
-  publishAllBtn: {
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
+  rowHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
   },
   editBtn: {

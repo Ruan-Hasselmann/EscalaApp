@@ -19,22 +19,19 @@ import {
   Membership,
 } from "@/services/memberships";
 import {
-  listenAllSchedulesByMonth,
+  listenSchedulesByMonth,
   Schedule,
 } from "@/services/schedule/schedules";
 import { getPeopleNamesByIds } from "@/services/people";
 import { getMinistryMap } from "@/services/ministries";
-import {
-  getGeneralScheduleByMonth,
-} from "@/services/schedule/generalSchedules";
+import { getGeneralScheduleByMonth } from "@/services/schedule/generalSchedules";
 
 /* =========================
    HELPERS
 ========================= */
 
 function firstName(name?: string) {
-  if (!name) return "—";
-  return name.split(" ")[0];
+  return name?.split(" ")[0] ?? "—";
 }
 
 function parseDateKey(dateKey: string) {
@@ -50,8 +47,9 @@ function formatDatePtBr(dateKey: string) {
   });
 }
 
-function monthLabel(year: number, jsMonth: number) {
-  return new Date(year, jsMonth, 1).toLocaleDateString("pt-BR", {
+function monthLabel(year: number, month: number) {
+  // month = 1–12
+  return new Date(year, month - 1, 1).toLocaleDateString("pt-BR", {
     month: "long",
     year: "numeric",
   });
@@ -71,11 +69,7 @@ function groupByService(schedules: Schedule[]) {
   });
 
   return Object.entries(map)
-    .map(([key, items]) => ({
-      key,
-      items,
-      ref: items[0],
-    }))
+    .map(([key, items]) => ({ key, items, ref: items[0] }))
     .sort(
       (a, b) =>
         parseDateKey(a.ref.serviceDate).getTime() -
@@ -93,7 +87,7 @@ export default function LeaderPublishedScheduleScreen() {
 
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
-  const [month, setMonth] = useState(today.getMonth()); // JS 0–11
+  const [month, setMonth] = useState(today.getMonth() + 1); // 🔥 1–12
 
   const [loading, setLoading] = useState(true);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
@@ -111,10 +105,6 @@ export default function LeaderPublishedScheduleScreen() {
     return listenMembershipsByUser(profile.uid, setMemberships);
   }, [profile?.uid]);
 
-  /* =========================
-     LEADER MINISTRIES
-  ========================= */
-
   const leaderMinistryIds = useMemo(
     () =>
       memberships
@@ -124,60 +114,65 @@ export default function LeaderPublishedScheduleScreen() {
   );
 
   /* =========================
-     LOAD DATA (MONTH)
+     LOAD GENERAL FLAG
   ========================= */
 
   useEffect(() => {
     if (!profile) return;
 
+    let active = true;
     setLoading(true);
 
-    let unsubscribe: () => void;
-
-    async function load() {
-      // 🔥 verifica escala geral
-      const general = await getGeneralScheduleByMonth(year, month + 1);
+    getGeneralScheduleByMonth(year, month).then((general) => {
+      if (!active) return;
       setGeneralPublished(!!general);
-
-      unsubscribe = listenAllSchedulesByMonth(
-        year,
-        month + 1,
-        async (allSchedules) => {
-          const visible = general
-            ? allSchedules // 👑 geral publicada → vê tudo
-            : allSchedules.filter((s) =>
-                leaderMinistryIds.includes(s.ministryId)
-              );
-
-          setSchedules(visible);
-
-          const personIds = Array.from(
-            new Set(
-              visible.flatMap((s) =>
-                s.assignments.map((a) => a.personId)
-              )
-            )
-          );
-
-          const [names, ministryMap] = await Promise.all([
-            getPeopleNamesByIds(personIds),
-            getMinistryMap(),
-          ]);
-
-          setPeopleNames(names);
-          setMinistries(ministryMap);
-
-          setLoading(false);
-        }
-      );
-    }
-
-    load();
+    });
 
     return () => {
-      unsubscribe && unsubscribe();
+      active = false;
     };
-  }, [profile, year, month, leaderMinistryIds.join(",")]);
+  }, [profile, year, month]);
+
+  /* =========================
+     LOAD SCHEDULES (REALTIME)
+  ========================= */
+
+  useEffect(() => {
+    if (!profile) return;
+
+    const unsubscribe = listenSchedulesByMonth(
+      year,
+      month,
+      async (allSchedules) => {
+        const visible = generalPublished
+          ? allSchedules
+          : allSchedules.filter((s) =>
+              leaderMinistryIds.includes(s.ministryId)
+            );
+
+        setSchedules(visible);
+
+        const personIds = Array.from(
+          new Set(
+            visible.flatMap((s) =>
+              s.assignments.map((a) => a.userId)
+            )
+          )
+        );
+
+        const [names, ministryMap] = await Promise.all([
+          getPeopleNamesByIds(personIds),
+          getMinistryMap(),
+        ]);
+
+        setPeopleNames(names);
+        setMinistries(ministryMap);
+        setLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [profile, year, month, generalPublished, leaderMinistryIds.join(",")]);
 
   /* =========================
      VIEW MODEL
@@ -203,9 +198,9 @@ export default function LeaderPublishedScheduleScreen() {
   ========================= */
 
   function goTo(offset: number) {
-    const d = new Date(year, month + offset, 1);
+    const d = new Date(year, month - 1 + offset, 1);
     setYear(d.getFullYear());
-    setMonth(d.getMonth());
+    setMonth(d.getMonth() + 1);
   }
 
   /* =========================
@@ -308,7 +303,7 @@ export default function LeaderPublishedScheduleScreen() {
         </Pressable>
 
         <Text style={styles.monthTitle}>
-          {monthLabel(year, month + 1)}
+          {monthLabel(year, month)}
         </Text>
 
         <Pressable onPress={() => goTo(1)} style={styles.navBtn}>
@@ -348,8 +343,8 @@ export default function LeaderPublishedScheduleScreen() {
                       </Text>
                     ) : (
                       schedule.assignments.map((a) => (
-                        <Text key={a.personId} style={styles.person}>
-                          • {firstName(peopleNames[a.personId])}
+                        <Text key={a.userId} style={styles.person}>
+                          • {firstName(peopleNames[a.userId])}
                         </Text>
                       ))
                     )}

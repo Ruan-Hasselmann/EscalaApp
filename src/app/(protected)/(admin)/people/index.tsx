@@ -70,40 +70,40 @@ export default function AdminPeople() {
   }, []);
 
   /* =========================
-     LOAD PEOPLE (WHATSAPP)
+     LOAD PEOPLE (SAFE)
   ========================= */
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadPeople() {
-      const entries = await Promise.all<
-        [string, Person] | null
-      >(
-        users.map(async (u) => {
+      const missing = users.filter((u) => !peopleMap[u.id]);
+      if (missing.length === 0) return;
+
+      const entries = await Promise.all(
+        missing.map(async (u) => {
           const person = await getPersonById(u.id);
-          return person ? [u.id, person] : null;
+          return person ? [u.id, person] as const : null;
         })
       );
 
       if (cancelled) return;
 
-      const map: Record<string, Person> = {};
-      entries.forEach((e) => {
-        if (e) map[e[0]] = e[1];
+      setPeopleMap((prev) => {
+        const next = { ...prev };
+        entries.forEach((e) => {
+          if (e) next[e[0]] = e[1];
+        });
+        return next;
       });
-
-      setPeopleMap(map);
     }
 
-    if (users.length > 0) {
-      loadPeople();
-    }
+    if (users.length > 0) loadPeople();
 
     return () => {
       cancelled = true;
     };
-  }, [users]);
+  }, [users, peopleMap]);
 
   /* =========================
      JOIN USERS + MEMBERSHIPS
@@ -151,6 +151,9 @@ export default function AdminPeople() {
     const user = users.find((u) => u.id === userId);
     if (!user) return;
 
+    // 🔒 Segurança: admin não pode se desativar
+    if (user.roles.includes("admin")) return;
+
     try {
       setTogglingId(userId);
       await toggleUserActive(userId, !user.active);
@@ -172,7 +175,7 @@ export default function AdminPeople() {
 
   return (
     <AppScreen>
-      <AppHeader title="👥 Pessoas" back/>
+      <AppHeader title="👥 Pessoas" back />
 
       <View style={styles.wrapper}>
         {rows.map((p) => (
@@ -189,12 +192,7 @@ export default function AdminPeople() {
             {/* INFO */}
             <View style={{ flex: 1 }}>
               <View style={styles.nameRow}>
-                <Text
-                  style={{
-                    color: theme.colors.text,
-                    fontWeight: "600",
-                  }}
-                >
+                <Text style={{ color: theme.colors.text, fontWeight: "600" }}>
                   {p.name}
                 </Text>
 
@@ -212,12 +210,7 @@ export default function AdminPeople() {
                 )}
               </View>
 
-              <Text
-                style={{
-                  color: theme.colors.textMuted,
-                  fontSize: 13,
-                }}
-              >
+              <Text style={{ color: theme.colors.textMuted, fontSize: 13 }}>
                 {p.email}
               </Text>
 
@@ -235,7 +228,6 @@ export default function AdminPeople() {
                 </Pressable>
               )}
 
-              {/* MINISTÉRIOS */}
               {p.ministries.map((m) => (
                 <Text
                   key={`${p.id}-${m.name}`}
@@ -265,7 +257,7 @@ export default function AdminPeople() {
             <View style={styles.actions}>
               <Pressable
                 onPress={() => handleToggleActive(p.id)}
-                disabled={togglingId === p.id}
+                disabled={p.isAdmin || togglingId === p.id}
                 style={[
                   styles.badge,
                   {
@@ -273,7 +265,8 @@ export default function AdminPeople() {
                       ? theme.colors.success
                       : theme.colors.background,
                     borderColor: theme.colors.border,
-                    opacity: togglingId === p.id ? 0.6 : 1,
+                    opacity:
+                      p.isAdmin || togglingId === p.id ? 0.5 : 1,
                   },
                 ]}
               >

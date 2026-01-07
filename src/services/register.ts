@@ -1,6 +1,14 @@
 import { createUserWithEmailAndPassword } from "firebase/auth";
-import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+import {
+  doc,
+  serverTimestamp,
+  writeBatch,
+} from "firebase/firestore";
 import { auth, db } from "@/services/firebase";
+
+/* =========================
+   DOMAIN TYPES
+========================= */
 
 type RegisterInput = {
   name: string;
@@ -9,38 +17,68 @@ type RegisterInput = {
   whatsapp: string;
 };
 
+/**
+ * REGRA DO SISTEMA:
+ * - uid do Auth é a chave soberana
+ * - users/{uid} e people/{uid} DEVEM existir juntos
+ * - criação deve ser atômica no Firestore
+ */
 export async function registerUser({
   name,
   email,
   password,
   whatsapp,
 }: RegisterInput) {
-  // 1️⃣ Cria no Auth
-  const cred = await createUserWithEmailAndPassword(
-    auth,
-    email,
-    password
-  );
+  // normalização básica
+  const safeName = name.trim();
+  const safeEmail = email.trim().toLowerCase();
+  const safeWhatsapp = whatsapp.trim();
 
-  const uid = cred.user.uid;
+  try {
+    // 1️⃣ Cria no Auth (já autentica automaticamente)
+    const cred = await createUserWithEmailAndPassword(
+      auth,
+      safeEmail,
+      password
+    );
 
-  // 2️⃣ users (controle de acesso / role)
-  await setDoc(doc(db, "users", uid), {
-    name,
-    email,
-    roles: ["member"],          // 🔑 papel do sistema
-    activeRole: "member",
-    active: true,
-    createdAt: serverTimestamp(),
-  });
+    const uid = cred.user.uid;
 
-  // 3️⃣ people (dados pessoais)
-  await setDoc(doc(db, "people", uid), {
-    name,
-    email,
-    whatsapp,
-    createdAt: serverTimestamp(),
-  });
+    // 2️⃣ Firestore (users + people) → ATÔMICO
+    const batch = writeBatch(db);
 
-  // 4️⃣ login automático acontece sozinho (Auth já está logado)
+    batch.set(doc(db, "users", uid), {
+      name: safeName,
+      email: safeEmail,
+
+      // permissões
+      roles: ["member"],       // papéis possíveis
+      activeRole: "member",    // papel atual
+
+      active: true,
+      createdAt: serverTimestamp(),
+    });
+
+    batch.set(doc(db, "people", uid), {
+      name: safeName,
+      email: safeEmail,
+      whatsapp: safeWhatsapp,
+      active: true,
+      createdAt: serverTimestamp(),
+    });
+
+    await batch.commit();
+
+    // 3️⃣ Login automático já está ativo via Auth
+    return uid;
+  } catch (error) {
+    /**
+     * IMPORTANTE:
+     * - Se falhar após criar no Auth, o usuário pode ficar "órfão"
+     * - Limpeza completa exige Admin SDK (backend)
+     * - Esse cenário deve ser monitorado/logado
+     */
+    console.error("[registerUser] erro ao registrar usuário", error);
+    throw error;
+  }
 }

@@ -15,16 +15,38 @@ import {
   useState,
 } from "react";
 
+/* =========================
+   DOMAIN TYPES
+========================= */
+
+/**
+ * REGRA DE DOMÍNIO:
+ * - Auth (Firebase) controla a sessão
+ * - users/{uid} é a fonte da verdade do perfil
+ * - activeRole DEVE existir dentro de roles
+ * - active=false bloqueia acesso global
+ */
+
 type AuthContextType = {
   user: User | null;
   profile: AppUserProfile | null;
-  loading: boolean;
+  loading: boolean; // auth ou profile em resolução
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
-  setActiveRole: (role: AppUserProfile["activeRole"]) => Promise<void>;
+  setActiveRole: (
+    role: AppUserProfile["activeRole"]
+  ) => Promise<void>;
 };
 
+/* =========================
+   CONTEXT
+========================= */
+
 const AuthContext = createContext<AuthContextType | null>(null);
+
+/* =========================
+   PROVIDER
+========================= */
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -35,7 +57,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let unsubProfile: (() => void) | null = null;
 
     const unsubAuth = onAuthStateChanged(auth, (u) => {
-      // limpa listener anterior
+      // limpa listener anterior de profile
       if (unsubProfile) {
         unsubProfile();
         unsubProfile = null;
@@ -55,14 +77,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       unsubProfile = onSnapshot(ref, (snap) => {
         if (!snap.exists()) {
+          // estado inválido: usuário autenticado sem profile
           setProfile(null);
           setLoading(false);
           return;
         }
 
+        const data = snap.data();
+
         setProfile({
           uid: u.uid,
-          ...(snap.data() as Omit<AppUserProfile, "uid">),
+          ...(data as Omit<AppUserProfile, "uid">),
         });
 
         setLoading(false);
@@ -74,6 +99,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (unsubProfile) unsubProfile();
     };
   }, []);
+
+  /* =========================
+     ACTIONS
+  ========================= */
 
   async function login(email: string, password: string) {
     await signInWithEmailAndPassword(auth, email, password);
@@ -87,6 +116,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     role: AppUserProfile["activeRole"]
   ) {
     if (!profile) return;
+
+    // defesa de domínio:
+    if (!profile.roles.includes(role)) {
+      throw new Error(
+        `[Auth] activeRole inválido: ${role} não existe em roles`
+      );
+    }
 
     await updateDoc(doc(db, "users", profile.uid), {
       activeRole: role,
@@ -108,6 +144,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     </AuthContext.Provider>
   );
 }
+
+/* =========================
+   HOOK
+========================= */
 
 export function useAuth() {
   const ctx = useContext(AuthContext);

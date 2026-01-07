@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+
 import { AppScreen } from "@/components/layout/AppScreen";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { useTheme } from "@/contexts/ThemeContext";
+
 import {
   listenAvailabilityWindow,
   setAvailabilityWindow,
@@ -34,15 +36,21 @@ function getMonthDays(year: number, month: number) {
 
   const cells: (Date | null)[] = [];
 
-  for (let i = 0; i < first.getDay(); i++) {
-    cells.push(null);
-  }
-
-  for (let d = 1; d <= last.getDate(); d++) {
+  for (let i = 0; i < first.getDay(); i++) cells.push(null);
+  for (let d = 1; d <= last.getDate(); d++)
     cells.push(new Date(year, month, d));
-  }
 
   return cells;
+}
+
+function parseDateKeyStart(dateKey: string) {
+  const [y, m, d] = dateKey.split("-").map(Number);
+  return new Date(y, m - 1, d, 0, 0, 0, 0);
+}
+
+function parseDateKeyEnd(dateKey: string) {
+  const [y, m, d] = dateKey.split("-").map(Number);
+  return new Date(y, m - 1, d, 23, 59, 59, 999);
 }
 
 /* =========================
@@ -52,14 +60,15 @@ function getMonthDays(year: number, month: number) {
 export default function AdminAvailability() {
   const { theme } = useTheme();
 
-  // 👉 foco automático no mês atual
   const today = new Date();
+
+  // 🔎 foco visual continua livre
   const [year, setYear] = useState(today.getFullYear());
-  const [month, setMonth] = useState(today.getMonth());
+  const [month, setMonth] = useState(today.getMonth()); // 0–11
 
   const WEEK_DAYS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 
-  const [window, setWindow] = useState<{
+  const [availabilityWindow, setAvailabilityWindowState] = useState<{
     start: Date;
     end: Date;
     open: boolean;
@@ -76,24 +85,14 @@ export default function AdminAvailability() {
      LISTENER
   ========================= */
 
-  function parseDateKeyStart(dateKey: string): Date {
-    const [y, m, d] = dateKey.split("-").map(Number);
-    return new Date(y, m - 1, d, 0, 0, 0, 0);
-  }
-
-  function parseDateKeyEnd(dateKey: string): Date {
-    const [y, m, d] = dateKey.split("-").map(Number);
-    return new Date(y, m - 1, d, 23, 59, 59, 999);
-  }
-
   useEffect(() => {
     return listenAvailabilityWindow((data) => {
       if (!data) {
-        setWindow(null);
+        setAvailabilityWindowState(null);
         return;
       }
 
-      setWindow({
+      setAvailabilityWindowState({
         start: parseDateKeyStart(data.startDate),
         end: parseDateKeyEnd(data.endDate),
         open: data.open,
@@ -105,14 +104,19 @@ export default function AdminAvailability() {
      DATA
   ========================= */
 
-  const days = useMemo(() => getMonthDays(year, month), [year, month]);
+  const days = useMemo(
+    () => getMonthDays(year, month),
+    [year, month]
+  );
 
-  const monthLabel = useMemo(() => {
-    return new Date(year, month).toLocaleDateString("pt-BR", {
-      month: "long",
-      year: "numeric",
-    });
-  }, [year, month]);
+  const monthLabel = useMemo(
+    () =>
+      new Date(year, month).toLocaleDateString("pt-BR", {
+        month: "long",
+        year: "numeric",
+      }),
+    [year, month]
+  );
 
   const isPastMonth =
     year < today.getFullYear() ||
@@ -145,7 +149,7 @@ export default function AdminAvailability() {
   }
 
   async function saveWindow() {
-    if (!selecting.start || !selecting.end) return;
+    if (!selecting.start || !selecting.end || isPastMonth) return;
 
     await setAvailabilityWindow({
       startDate: toDateKey(selecting.start),
@@ -166,8 +170,8 @@ export default function AdminAvailability() {
   }
 
   function isActive(day: Date) {
-    if (!window || !window.open) return false;
-    return isBetween(day, window.start, window.end);
+    if (!availabilityWindow || !availabilityWindow.open) return false;
+    return isBetween(day, availabilityWindow.start, availabilityWindow.end);
   }
 
   /* =========================
@@ -176,13 +180,11 @@ export default function AdminAvailability() {
 
   return (
     <AppScreen>
-      <AppHeader title="🪟 Janela de Disponibilidade" back/>
+      <AppHeader title="🪟 Janela de Disponibilidade" back />
 
       <View style={styles.wrapper}>
-        {/* INFO */}
         <Text style={[styles.info, { color: theme.colors.textMuted }]}>
-          Os membros só poderão marcar disponibilidade dentro do período definido
-          abaixo.
+          Os membros só poderão marcar disponibilidade dentro do período definido abaixo.
         </Text>
 
         {/* MÊS */}
@@ -272,14 +274,12 @@ export default function AdminAvailability() {
           })}
         </View>
 
-        {/* FEEDBACK */}
         {savedFeedback && (
           <Text style={{ color: theme.colors.success, marginTop: 12 }}>
             ✅ Janela salva com sucesso
           </Text>
         )}
 
-        {/* AÇÕES */}
         {selecting.start && selecting.end && (
           <Pressable
             onPress={saveWindow}
@@ -299,13 +299,15 @@ export default function AdminAvailability() {
           </Pressable>
         )}
 
-        {window && (
+        {availabilityWindow && (
           <Pressable
-            onPress={() => toggleAvailability(!window.open)}
+            onPress={() =>
+              toggleAvailability(!availabilityWindow.open)
+            }
             style={[
               styles.button,
               {
-                backgroundColor: window.open
+                backgroundColor: availabilityWindow.open
                   ? theme.colors.danger
                   : theme.colors.success,
               },
@@ -317,7 +319,9 @@ export default function AdminAvailability() {
                 fontWeight: "600",
               }}
             >
-              {window.open ? "🔒 Fechar janela" : "🔓 Reabrir janela"}
+              {availabilityWindow.open
+                ? "🔒 Fechar janela"
+                : "🔓 Reabrir janela"}
             </Text>
           </Pressable>
         )}

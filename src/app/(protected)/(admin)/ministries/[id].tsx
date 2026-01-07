@@ -50,7 +50,6 @@ export default function AdminMinistryMembers() {
       id,
       async (list: Membership[]) => {
         try {
-          // 🔑 carrega pessoas em paralelo
           const people = await Promise.all(
             list.map((m) => getPersonById(m.userId))
           );
@@ -191,7 +190,7 @@ export default function AdminMinistryMembers() {
                       ? theme.colors.primaryContrast
                       : theme.colors.textMuted,
                   fontSize: 12,
-                  fontWeight: "600",
+                  fontWeight: "700",
                 }}
               >
                 {m.role === "leader" ? "Líder ⭐" : "Membro"}

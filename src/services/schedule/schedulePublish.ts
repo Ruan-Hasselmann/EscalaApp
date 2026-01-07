@@ -5,14 +5,20 @@ import {
   query,
   updateDoc,
   where,
+  writeBatch,
+  serverTimestamp,
 } from "firebase/firestore";
 import { db } from "@/services/firebase";
 
 /* =========================
-   TYPES
+   HELPERS
 ========================= */
 
-export type ScheduleStatus = "draft" | "published";
+function assertMonth1to12(month: number) {
+  if (month < 1 || month > 12) {
+    throw new Error(`[publishSchedules] month inválido: ${month} (esperado 1–12)`);
+  }
+}
 
 /* =========================
    PUBLISH ONE SERVICE
@@ -27,6 +33,8 @@ export async function publishServiceSchedules(
   serviceId: string,
   ministryIds: string[]
 ) {
+  if (ministryIds.length === 0) return;
+
   const q = query(
     collection(db, "schedules"),
     where("serviceDate", "==", serviceDate),
@@ -35,18 +43,20 @@ export async function publishServiceSchedules(
   );
 
   const snap = await getDocs(q);
+  if (snap.empty) return;
 
-  const updates = snap.docs.filter((d) =>
-    ministryIds.includes(d.data().ministryId)
-  );
+  const batch = writeBatch(db);
 
-  await Promise.all(
-    updates.map((d) =>
-      updateDoc(doc(db, "schedules", d.id), {
-        status: "published",
-      })
-    )
-  );
+  snap.docs.forEach((d) => {
+    if (!ministryIds.includes(d.data().ministryId)) return;
+
+    batch.update(doc(db, "schedules", d.id), {
+      status: "published",
+      publishedAt: serverTimestamp(),
+    });
+  });
+
+  await batch.commit();
 }
 
 /* =========================
@@ -62,6 +72,10 @@ export async function publishAllDraftSchedules(
   month: number,
   ministryIds: string[]
 ) {
+  if (ministryIds.length === 0) return;
+
+  assertMonth1to12(month);
+
   const q = query(
     collection(db, "schedules"),
     where("year", "==", year),
@@ -70,16 +84,18 @@ export async function publishAllDraftSchedules(
   );
 
   const snap = await getDocs(q);
+  if (snap.empty) return;
 
-  const updates = snap.docs.filter((d) =>
-    ministryIds.includes(d.data().ministryId)
-  );
+  const batch = writeBatch(db);
 
-  await Promise.all(
-    updates.map((d) =>
-      updateDoc(doc(db, "schedules", d.id), {
-        status: "published",
-      })
-    )
-  );
+  snap.docs.forEach((d) => {
+    if (!ministryIds.includes(d.data().ministryId)) return;
+
+    batch.update(doc(db, "schedules", d.id), {
+      status: "published",
+      publishedAt: serverTimestamp(),
+    });
+  });
+
+  await batch.commit();
 }

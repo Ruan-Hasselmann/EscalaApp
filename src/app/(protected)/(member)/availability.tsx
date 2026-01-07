@@ -43,8 +43,9 @@ function getMonthDays(year: number, month: number) {
   const cells: (Date | null)[] = [];
 
   for (let i = 0; i < first.getDay(); i++) cells.push(null);
-  for (let d = 1; d <= last.getDate(); d++)
+  for (let d = 1; d <= last.getDate(); d++) {
     cells.push(new Date(year, month, d));
+  }
 
   return cells;
 }
@@ -54,7 +55,7 @@ function getTargetMonth() {
   const target = new Date(now.getFullYear(), now.getMonth() + 1, 1);
   return {
     year: target.getFullYear(),
-    month: target.getMonth(),
+    month: target.getMonth(), // 0–11
   };
 }
 
@@ -78,7 +79,7 @@ export default function MemberAvailabilityScreen() {
 
   const target = getTargetMonth();
   const year = target.year;
-  const month = target.month;
+  const month = target.month; // 0–11
 
   const monthLabel = new Date(year, month).toLocaleDateString("pt-BR", {
     month: "long",
@@ -108,6 +109,13 @@ export default function MemberAvailabilityScreen() {
     return listenAvailabilityWindow(setWindowData);
   }, []);
 
+  // 🔄 força reavaliação da janela (ex: quando abre enquanto a tela está aberta)
+  const [, forceTick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => forceTick((v) => v + 1), 60_000);
+    return () => clearInterval(t);
+  }, []);
+
   const windowParsed = useMemo(() => {
     if (!windowData) return null;
     return {
@@ -128,7 +136,8 @@ export default function MemberAvailabilityScreen() {
   ========================= */
 
   useEffect(() => {
-    listActiveServiceDaysByMonth(year, month).then(setServiceDays);
+    // 🔥 month + 1 → domínio 1–12
+    listActiveServiceDaysByMonth(year, month + 1).then(setServiceDays);
   }, [year, month]);
 
   const serviceDayMap = useMemo(() => {
@@ -207,7 +216,7 @@ export default function MemberAvailabilityScreen() {
 
   return (
     <AppScreen>
-      <AppHeader title="🗓️ Minha disponibilidade" back/>
+      <AppHeader title="🗓️ Minha disponibilidade" back />
 
       <View style={styles.wrapper}>
         <Text style={[styles.subtitle, { color: theme.colors.text }]}>
@@ -269,12 +278,13 @@ export default function MemberAvailabilityScreen() {
             const dateKey = toDateKey(date);
             const sd = serviceDayMap[dateKey];
             const hasService = !!sd;
+            const disabled = !hasService || !isWindowOpenToday();
 
             return (
               <Pressable
                 key={dateKey}
                 onPress={() => onDayPress(date)}
-                disabled={!hasService || !isWindowOpenToday()}
+                disabled={disabled}
                 style={[
                   styles.cell,
                   {
@@ -282,7 +292,7 @@ export default function MemberAvailabilityScreen() {
                       ? theme.colors.surface
                       : "transparent",
                     borderColor: theme.colors.border,
-                    opacity: hasService ? 1 : 0.3,
+                    opacity: disabled ? 0.4 : 1,
                   },
                 ]}
               >
@@ -305,7 +315,10 @@ export default function MemberAvailabilityScreen() {
                       return (
                         <View
                           key={s.id}
-                          style={[styles.dot, { backgroundColor: color }]}
+                          style={[
+                            styles.dot,
+                            { backgroundColor: color },
+                          ]}
                         />
                       );
                     })}
@@ -321,9 +334,7 @@ export default function MemberAvailabilityScreen() {
         visible={turnModalOpen}
         dateKey={selectedDateKey}
         serviceDay={
-          selectedDateKey
-            ? serviceDayMap[selectedDateKey]
-            : null
+          selectedDateKey ? serviceDayMap[selectedDateKey] : null
         }
         statusMap={statusMap}
         busyKey={busyKey}
@@ -363,14 +374,7 @@ function LegendDot({
           backgroundColor: color,
         }}
       />
-      <Text
-        style={{
-          fontSize: 12,
-          color: textColor,
-        }}
-      >
-        {label}
-      </Text>
+      <Text style={{ fontSize: 12, color: textColor }}>{label}</Text>
     </View>
   );
 }

@@ -16,7 +16,7 @@ import MinistryModal from "./MinistryModal";
 ========================= */
 
 type MinistryRow = Ministry & {
-  membersCount: number;
+  membersCount: number; // líderes + membros
   leadersCount: number;
 };
 
@@ -30,9 +30,7 @@ export default function AdminMinistries() {
 
   const [ministries, setMinistries] = useState<Ministry[]>([]);
   const [memberships, setMemberships] = useState<Membership[]>([]);
-
   const [selected, setSelected] = useState<Ministry | null>(null);
-  const [modalOpen, setModalOpen] = useState(false);
 
   /* =========================
      SNAPSHOTS
@@ -59,12 +57,14 @@ export default function AdminMinistries() {
           (mb) => mb.ministryId === m.id && mb.active
         );
 
+        const leaders = activeMemberships.filter(
+          (mb) => mb.role === "leader"
+        );
+
         return {
           ...m,
           membersCount: activeMemberships.length,
-          leadersCount: activeMemberships.filter(
-            (mb) => mb.role === "leader"
-          ).length,
+          leadersCount: leaders.length,
         };
       })
       .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
@@ -76,16 +76,15 @@ export default function AdminMinistries() {
 
   function openNew() {
     setSelected(null);
-    setModalOpen(true);
+    setSelected({} as Ministry); // força abrir modal vazio
   }
 
   function openEdit(m: Ministry) {
     setSelected(m);
-    setModalOpen(true);
   }
 
   function openPeople(m: Ministry) {
-    router.push(`/(protected)/(admin)/ministries/${m.id}`);
+    router.push(`/ministries/${m.id}`);
   }
 
   /* =========================
@@ -94,7 +93,7 @@ export default function AdminMinistries() {
 
   return (
     <AppScreen>
-      <AppHeader title="🎧 Ministérios" back/>
+      <AppHeader title="🎧 Ministérios" back />
 
       <View style={styles.wrapper}>
         {/* NOVO */}
@@ -113,7 +112,7 @@ export default function AdminMinistries() {
           </Text>
         </Pressable>
 
-        {/* EMPTY STATE */}
+        {/* EMPTY */}
         {rows.length === 0 && (
           <Text
             style={{
@@ -128,8 +127,9 @@ export default function AdminMinistries() {
 
         {/* LISTA */}
         {rows.map((m) => (
-          <View
+          <Pressable
             key={m.id}
+            onPress={() => openPeople(m)}
             style={[
               styles.card,
               {
@@ -138,46 +138,37 @@ export default function AdminMinistries() {
               },
             ]}
           >
-            {/* CLICK AREA */}
-            <Pressable
-              onPress={() => openPeople(m)}
-              style={({ pressed }) => [
-                pressed && { opacity: 0.85 },
-              ]}
+            <Text
+              style={{
+                color: theme.colors.text,
+                fontSize: 16,
+                fontWeight: "700",
+              }}
             >
-              <Text
-                style={{
-                  color: theme.colors.text,
-                  fontSize: 16,
-                  fontWeight: "700",
-                }}
-              >
-                {m.name}
-              </Text>
+              {m.name}
+            </Text>
 
-              {m.description ? (
-                <Text
-                  style={{
-                    color: theme.colors.textMuted,
-                    marginTop: 4,
-                  }}
-                >
-                  {m.description}
-                </Text>
-              ) : null}
-
+            {m.description ? (
               <Text
                 style={{
                   color: theme.colors.textMuted,
-                  marginTop: 8,
-                  fontSize: 13,
+                  marginTop: 4,
                 }}
               >
-                👥 {m.membersCount} membros · ⭐ {m.leadersCount} líderes
+                {m.description}
               </Text>
-            </Pressable>
+            ) : null}
 
-            {/* ACTIONS */}
+            <Text
+              style={{
+                color: theme.colors.textMuted,
+                marginTop: 8,
+                fontSize: 13,
+              }}
+            >
+              👥 {m.membersCount} membros · ⭐ {m.leadersCount} líderes
+            </Text>
+
             <View style={styles.actions}>
               <Pressable
                 onPress={() => openEdit(m)}
@@ -199,18 +190,15 @@ export default function AdminMinistries() {
                 </Text>
               </Pressable>
             </View>
-          </View>
+          </Pressable>
         ))}
       </View>
 
       {/* MODAL */}
       <MinistryModal
-        visible={modalOpen}
-        ministry={selected}
-        onClose={() => {
-          setModalOpen(false);
-          setSelected(null);
-        }}
+        visible={!!selected}
+        ministry={selected && selected.id ? selected : null}
+        onClose={() => setSelected(null)}
       />
     </AppScreen>
   );
@@ -226,7 +214,6 @@ const styles = StyleSheet.create({
     maxWidth: 520,
     alignSelf: "center",
   },
-
   newBtn: {
     paddingVertical: 14,
     borderRadius: 14,
@@ -234,20 +221,17 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderWidth: 1,
   },
-
   card: {
     borderWidth: 1,
     borderRadius: 16,
     padding: 14,
     marginBottom: 12,
   },
-
   actions: {
     flexDirection: "row",
     justifyContent: "flex-end",
     marginTop: 12,
   },
-
   actionBtn: {
     borderWidth: 1,
     borderRadius: 10,

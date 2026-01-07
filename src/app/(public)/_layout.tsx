@@ -2,11 +2,12 @@ import { Redirect, Stack } from "expo-router";
 import { useAuth } from "@/contexts/AuthContext";
 
 export default function PublicLayout() {
-  const { profile, loading } = useAuth();
+  const { user, loading } = useAuth();
 
   if (loading) return null;
 
-  if (profile) {
+  // 🔒 Usuário logado não acessa rotas públicas
+  if (user) {
     return <Redirect href="/" />;
   }
 

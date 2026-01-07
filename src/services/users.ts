@@ -8,12 +8,20 @@ import {
   updateDoc,
   arrayUnion,
   arrayRemove,
+  serverTimestamp,
 } from "firebase/firestore";
 import { db } from "./firebase";
 
 /* =========================
-   TYPES
+   DOMAIN TYPES
 ========================= */
+
+/**
+ * REGRA DO SISTEMA:
+ * - users/{id} usa uid do Auth como ID
+ * - roles é a FONTE DA VERDADE de permissões
+ * - active controla acesso global
+ */
 
 export type UserRole = "admin" | "leader" | "member";
 
@@ -22,7 +30,7 @@ export type AppUser = {
   name: string;
   email: string;
   active: boolean;
-  roles: UserRole[]; // ✅ fonte da verdade
+  roles: UserRole[];
 };
 
 /* =========================
@@ -34,7 +42,7 @@ export function listenUsers(
 ) {
   const q = query(
     collection(db, "users"),
-    orderBy("name")
+    orderBy("name", "asc")
   );
 
   return onSnapshot(q, (snap) => {
@@ -43,9 +51,9 @@ export function listenUsers(
 
       return {
         id: d.id,
-        name: data.name,
-        email: data.email,
-        active: data.active ?? true,
+        name: String(data.name ?? ""),
+        email: String(data.email ?? ""),
+        active: Boolean(data.active ?? true),
         roles: (data.roles ?? []) as UserRole[],
       };
     });
@@ -68,9 +76,9 @@ export async function getUserById(
 
   return {
     id: snap.id,
-    name: data.name,
-    email: data.email,
-    active: data.active ?? true,
+    name: String(data.name ?? ""),
+    email: String(data.email ?? ""),
+    active: Boolean(data.active ?? true),
     roles: (data.roles ?? []) as UserRole[],
   };
 }
@@ -79,11 +87,19 @@ export async function getUserById(
    TOGGLE ACTIVE
 ========================= */
 
+/**
+ * Ativa / desativa usuário
+ * ⚠️ REGRA FUTURA:
+ * - evitar desativar o último admin do sistema
+ */
 export async function toggleUserActive(
   userId: string,
   active: boolean
 ) {
-  await updateDoc(doc(db, "users", userId), { active });
+  await updateDoc(doc(db, "users", userId), {
+    active,
+    updatedAt: serverTimestamp(),
+  });
 }
 
 /* =========================
@@ -91,7 +107,7 @@ export async function toggleUserActive(
 ========================= */
 
 /**
- * Adiciona um role ao usuário (ex: "admin")
+ * Adiciona um role ao usuário
  * Usa arrayUnion para evitar duplicação
  */
 export async function addUserRole(
@@ -100,11 +116,14 @@ export async function addUserRole(
 ) {
   await updateDoc(doc(db, "users", userId), {
     roles: arrayUnion(role),
+    updatedAt: serverTimestamp(),
   });
 }
 
 /**
- * Remove um role do usuário (ex: "admin")
+ * Remove um role do usuário
+ * ⚠️ REGRA FUTURA:
+ * - usuário não deve ficar sem role
  */
 export async function removeUserRole(
   userId: string,
@@ -112,11 +131,13 @@ export async function removeUserRole(
 ) {
   await updateDoc(doc(db, "users", userId), {
     roles: arrayRemove(role),
+    updatedAt: serverTimestamp(),
   });
 }
 
 /**
- * Toggle específico para admin (caso mais comum)
+ * Toggle específico para admin
+ * (caso mais comum no painel)
  */
 export async function toggleAdminRole(
   userId: string,
@@ -126,5 +147,6 @@ export async function toggleAdminRole(
     roles: makeAdmin
       ? arrayUnion("admin")
       : arrayRemove("admin"),
+    updatedAt: serverTimestamp(),
   });
 }

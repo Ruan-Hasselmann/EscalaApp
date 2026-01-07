@@ -89,7 +89,7 @@ export function ServiceDayModal({
 
   const dateKey = toDateKey(date);
   const year = date.getFullYear();
-  const month = date.getMonth();
+  const month = date.getMonth() + 1; // ✅ CORREÇÃO: 1–12
   const day = date.getDate();
 
   /* =========================
@@ -104,7 +104,7 @@ export function ServiceDayModal({
       setBusy(true);
 
       const service: ServiceTurn = {
-        id: `${turn}-${type}-${Date.now()}`,
+        id: crypto.randomUUID(), // ✅ ID seguro
         label:
           type === "special"
             ? label.trim()
@@ -267,8 +267,7 @@ export function ServiceDayModal({
             onPress={addService}
             disabled={
               busy ||
-              (type === "special" &&
-                !label.trim())
+              (type === "special" && !label.trim())
             }
             style={[
               styles.button,
@@ -276,8 +275,7 @@ export function ServiceDayModal({
                 backgroundColor: theme.colors.primary,
                 opacity:
                   busy ||
-                  (type === "special" &&
-                    !label.trim())
+                  (type === "special" && !label.trim())
                     ? 0.6
                     : 1,
               },

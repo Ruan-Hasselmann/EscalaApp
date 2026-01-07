@@ -20,6 +20,7 @@ export type EditableMember = {
 
 type Props = {
   visible: boolean;
+
   ministryName: string;
   serviceLabel: string;
   serviceDate: string; // YYYY-MM-DD
@@ -36,16 +37,13 @@ type Props = {
    HELPERS
 ========================= */
 
-function firstNameSafe(name: string) {
-  if (!name) return "Membro";
-  return name.trim().split(" ")[0];
+function firstName(name: string) {
+  return name?.trim().split(" ")[0] ?? "Membro";
 }
 
 function formatDatePtBr(dateKey: string) {
-  const [year, month, day] = dateKey.split("-").map(Number);
-  const date = new Date(year, month - 1, day);
-
-  return date.toLocaleDateString("pt-BR", {
+  const [y, m, d] = dateKey.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString("pt-BR", {
     weekday: "long",
     day: "2-digit",
     month: "long",
@@ -69,38 +67,32 @@ export function EditScheduleModal({
 }: Props) {
   const { theme } = useTheme();
 
-  if (!visible) return null;
-
   const orderedMembers = [...members].sort((a, b) =>
     a.name.localeCompare(b.name, "pt-BR", { sensitivity: "base" })
   );
 
   return (
     <Modal visible={visible} transparent animationType="fade">
-      <View style={styles.overlay}>
-        <View
+      {/* OVERLAY */}
+      <Pressable style={styles.overlay} onPress={onCancel}>
+        {/* MODAL */}
+        <Pressable
           style={[
             styles.modal,
             { backgroundColor: theme.colors.surface },
           ]}
+          onPress={() => {}}
         >
           {/* HEADER */}
-          <Text
-            style={[
-              styles.title,
-              { color: theme.colors.text },
-            ]}
-          >
+          <Text style={[styles.title, { color: theme.colors.text }]}>
             Trocar pessoa — {ministryName}
           </Text>
 
           <Text
-            style={{
-              color: theme.colors.textMuted,
-              fontSize: 13,
-              marginBottom: 12,
-              textTransform: "capitalize",
-            }}
+            style={[
+              styles.subtitle,
+              { color: theme.colors.textMuted },
+            ]}
           >
             {serviceLabel} • {formatDatePtBr(serviceDate)}
           </Text>
@@ -108,11 +100,10 @@ export function EditScheduleModal({
           {/* LIST */}
           {orderedMembers.length === 0 ? (
             <Text
-              style={{
-                color: theme.colors.textMuted,
-                textAlign: "center",
-                marginVertical: 20,
-              }}
+              style={[
+                styles.empty,
+                { color: theme.colors.textMuted },
+              ]}
             >
               ⚠️ Nenhum membro disponível para este culto.
             </Text>
@@ -149,7 +140,7 @@ export function EditScheduleModal({
                           fontWeight: "600",
                         }}
                       >
-                        {firstNameSafe(m.name)}
+                        {firstName(m.name)}
                       </Text>
 
                       <Text
@@ -205,14 +196,15 @@ export function EditScheduleModal({
                     ? theme.colors.primary
                     : theme.colors.textMuted,
                   fontWeight: "700",
+                  opacity: selectedPersonId ? 1 : 0.6,
                 }}
               >
                 Salvar alteração
               </Text>
             </Pressable>
           </View>
-        </View>
-      </View>
+        </Pressable>
+      </Pressable>
     </Modal>
   );
 }
@@ -239,6 +231,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
   },
+  subtitle: {
+    marginTop: 4,
+    marginBottom: 12,
+    fontSize: 13,
+    textTransform: "capitalize",
+  },
   row: {
     flexDirection: "row",
     alignItems: "center",
@@ -247,6 +245,10 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 8,
     gap: 12,
+  },
+  empty: {
+    textAlign: "center",
+    marginVertical: 20,
   },
   actions: {
     marginTop: 18,

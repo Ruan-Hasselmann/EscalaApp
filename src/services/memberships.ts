@@ -7,6 +7,9 @@ import {
   updateDoc,
   deleteDoc,
   doc,
+  getDocs,
+  serverTimestamp,
+  orderBy,
 } from "firebase/firestore";
 import { db } from "./firebase";
 
@@ -22,6 +25,8 @@ export type Membership = {
   ministryId: string;
   role: MembershipRole;
   active: boolean;
+  createdAt?: any;
+  updatedAt?: any;
 };
 
 /* =========================
@@ -35,7 +40,8 @@ export function listenMembershipsByMinistry(
   const q = query(
     collection(db, "memberships"),
     where("ministryId", "==", ministryId),
-    where("active", "==", true)
+    where("active", "==", true),
+    orderBy("createdAt", "asc")
   );
 
   return onSnapshot(q, (snap) => {
@@ -54,10 +60,13 @@ export function listenMembershipsByMinistry(
 export function listenMemberships(
   callback: (items: Membership[]) => void
 ) {
-  const q = query(collection(db, "memberships"));
+  const q = query(
+    collection(db, "memberships"),
+    orderBy("createdAt", "asc")
+  );
 
   return onSnapshot(q, (snap) => {
-    const items: Membership[] = snap.docs.map((d) => ({
+    const items = snap.docs.map((d) => ({
       id: d.id,
       ...(d.data() as Omit<Membership, "id">),
     }));
@@ -76,11 +85,13 @@ export function listenMembershipsByUser(
 ) {
   const q = query(
     collection(db, "memberships"),
-    where("userId", "==", userId)
+    where("userId", "==", userId),
+    where("active", "==", true),
+    orderBy("createdAt", "asc")
   );
 
   return onSnapshot(q, (snap) => {
-    const items: Membership[] = snap.docs.map((d) => ({
+    const items = snap.docs.map((d) => ({
       id: d.id,
       ...(d.data() as Omit<Membership, "id">),
     }));
@@ -90,7 +101,7 @@ export function listenMembershipsByUser(
 }
 
 /* =========================
-   UPSERT
+   UPSERT (REAL)
 ========================= */
 
 export async function upsertMembership(
@@ -98,11 +109,32 @@ export async function upsertMembership(
   ministryId: string,
   role: MembershipRole
 ) {
+  const q = query(
+    collection(db, "memberships"),
+    where("userId", "==", userId),
+    where("ministryId", "==", ministryId)
+  );
+
+  const snap = await getDocs(q);
+
+  // Já existe → reativa e ajusta role
+  if (!snap.empty) {
+    const ref = doc(db, "memberships", snap.docs[0].id);
+    await updateDoc(ref, {
+      role,
+      active: true,
+      updatedAt: serverTimestamp(),
+    });
+    return;
+  }
+
+  // Não existe → cria novo
   await addDoc(collection(db, "memberships"), {
     userId,
     ministryId,
     role,
     active: true,
+    createdAt: serverTimestamp(),
   });
 }
 
@@ -114,13 +146,19 @@ export async function updateMembershipRole(
   membershipId: string,
   role: MembershipRole
 ) {
-  await updateDoc(doc(db, "memberships", membershipId), { role });
+  await updateDoc(doc(db, "memberships", membershipId), {
+    role,
+    updatedAt: serverTimestamp(),
+  });
 }
 
 /* =========================
-   REMOVE
+   SOFT REMOVE
 ========================= */
 
 export async function removeMembership(membershipId: string) {
-  await deleteDoc(doc(db, "memberships", membershipId));
+  await updateDoc(doc(db, "memberships", membershipId), {
+    active: false,
+    updatedAt: serverTimestamp(),
+  });
 }

@@ -1,5 +1,24 @@
-import { collection, doc, documentId, getDoc, getDocs, query, where } from "firebase/firestore";
+import {
+  collection,
+  doc,
+  documentId,
+  getDoc,
+  getDocs,
+  query,
+  where,
+  orderBy,
+} from "firebase/firestore";
 import { db } from "./firebase";
+
+/* =========================
+   DOMAIN TYPES
+========================= */
+
+/**
+ * REGRA DO SISTEMA:
+ * - people/{id} usa o uid do Auth como ID
+ * - Documento representa dados pessoais do usuário
+ */
 
 export type Person = {
   id: string; // uid
@@ -9,8 +28,14 @@ export type Person = {
   active: boolean;
 };
 
+/* =========================
+   QUERIES
+========================= */
+
 export async function listPeople(): Promise<Person[]> {
-  const snap = await getDocs(collection(db, "people"));
+  const snap = await getDocs(
+    query(collection(db, "people"), orderBy("name", "asc"))
+  );
 
   return snap.docs.map((d) => ({
     id: d.id,
@@ -36,15 +61,27 @@ export async function getPersonById(
    HELPERS
 ========================= */
 
-function firstName(name: string) {
-  return name
-    .trim()
-    .split(/\s+/)[0];
+/**
+ * Extrai o primeiro nome de forma segura
+ * (uso em UI, labels e conflitos visuais)
+ */
+function firstNameSafe(name?: string) {
+  if (!name) return "—";
+
+  const cleaned = String(name).trim();
+  if (!cleaned) return "—";
+
+  return cleaned.split(/\s+/)[0];
 }
 
 /**
  * Retorna um mapa:
  * { [personId]: firstName }
+ *
+ * ⚠️ CONTRATO:
+ * - Usa coleção `people`
+ * - Retorna PRIMEIRO NOME (derivado)
+ * - Uso apenas para UI / leitura
  */
 export async function getPeopleNamesByIds(
   personIds: string[]
@@ -65,8 +102,7 @@ export async function getPeopleNamesByIds(
     const snap = await getDocs(q);
 
     snap.docs.forEach((d) => {
-      const fullName = String(d.data().name ?? "—");
-      map[d.id] = firstName(fullName);
+      map[d.id] = firstNameSafe(d.data().name);
     });
   }
 

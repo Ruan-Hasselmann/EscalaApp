@@ -8,7 +8,6 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  ScrollView,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { sendPasswordResetEmail } from "firebase/auth";
@@ -41,12 +40,14 @@ export default function ForgotPasswordScreen() {
   async function handleReset() {
     if (loading) return;
 
-    if (!email) {
+    const safeEmail = email.trim().toLowerCase();
+
+    if (!safeEmail) {
       setError("Informe seu email.");
       return;
     }
 
-    if (!isValidEmail(email)) {
+    if (!isValidEmail(safeEmail)) {
       setError("Email inválido.");
       return;
     }
@@ -55,8 +56,7 @@ export default function ForgotPasswordScreen() {
       setLoading(true);
       setError(null);
 
-      await sendPasswordResetEmail(auth, email.trim());
-
+      await sendPasswordResetEmail(auth, safeEmail);
       setSuccess(true);
     } catch {
       setError(
@@ -70,153 +70,150 @@ export default function ForgotPasswordScreen() {
   return (
     <AppScreen>
       <KeyboardAvoidingView
-        style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
+        style={styles.container}
       >
-        <ScrollView
-          contentContainerStyle={styles.scroll}
-          keyboardShouldPersistTaps="handled"
-        >
-          <View style={styles.card}>
-            {/* HEADER */}
-            <Text style={[styles.title, { color: theme.colors.text }]}>
-              🔑 Recuperar senha
-            </Text>
+        <View style={styles.card}>
+          <Text style={[styles.title, { color: theme.colors.text }]}>
+            🔑 Recuperar senha
+          </Text>
 
-            <Text
-              style={[
-                styles.subtitle,
-                { color: theme.colors.textMuted },
-              ]}
-            >
-              Informe o email cadastrado para receber o link de redefinição.
-            </Text>
+          <Text
+            style={[
+              styles.subtitle,
+              { color: theme.colors.textMuted },
+            ]}
+          >
+            Informe o email cadastrado para receber o link de redefinição.
+          </Text>
 
-            {!success ? (
-              <>
-                <TextInput
-                  value={email}
-                  onChangeText={setEmail}
-                  placeholder="Email"
-                  placeholderTextColor={theme.colors.textMuted}
-                  autoCapitalize="none"
-                  keyboardType="email-address"
-                  editable={!loading}
-                  returnKeyType="done"
-                  onSubmitEditing={handleReset}
-                  style={[
-                    styles.input,
-                    {
-                      color: theme.colors.text,
-                      borderColor: theme.colors.border,
-                    },
-                  ]}
-                />
+          {!success ? (
+            <>
+              <TextInput
+                value={email}
+                onChangeText={(v) => {
+                  setEmail(v);
+                  if (error) setError(null);
+                }}
+                placeholder="Email"
+                placeholderTextColor={theme.colors.textMuted}
+                autoCapitalize="none"
+                keyboardType="email-address"
+                textContentType="emailAddress"
+                editable={!loading}
+                returnKeyType="done"
+                onSubmitEditing={handleReset}
+                style={[
+                  styles.input,
+                  {
+                    color: theme.colors.text,
+                    borderColor: theme.colors.border,
+                  },
+                ]}
+              />
 
-                {error && (
-                  <Text
-                    style={[
-                      styles.error,
-                      { color: theme.colors.danger },
-                    ]}
-                  >
-                    {error}
-                  </Text>
-                )}
-
-                <Pressable
-                  onPress={handleReset}
-                  disabled={loading}
-                  style={[
-                    styles.button,
-                    {
-                      backgroundColor: theme.colors.primary,
-                      opacity: loading ? 0.7 : 1,
-                    },
-                  ]}
-                >
-                  {loading ? (
-                    <ActivityIndicator
-                      color={theme.colors.primaryContrast}
-                    />
-                  ) : (
-                    <Text
-                      style={{
-                        color: theme.colors.primaryContrast,
-                        fontWeight: "600",
-                      }}
-                    >
-                      Enviar link
-                    </Text>
-                  )}
-                </Pressable>
-
-                <Pressable
-                  disabled={loading}
-                  onPress={() => router.replace("/login")}
-                  style={{ marginTop: 16 }}
-                >
-                  <Text
-                    style={{
-                      color: theme.colors.textMuted,
-                      textAlign: "center",
-                    }}
-                  >
-                    Voltar para o login
-                  </Text>
-                </Pressable>
-              </>
-            ) : (
-              <>
+              {error && (
                 <Text
                   style={[
-                    styles.text,
-                    {
-                      color: theme.colors.text,
-                      fontWeight: "600",
-                      textAlign: "center",
-                    },
+                    styles.error,
+                    { color: theme.colors.danger },
                   ]}
                 >
-                  📧 Email enviado!
+                  {error}
                 </Text>
+              )}
 
-                <Text
-                  style={[
-                    styles.text,
-                    {
-                      color: theme.colors.textMuted,
-                      textAlign: "center",
-                      marginTop: 8,
-                    },
-                  ]}
-                >
-                  Verifique sua caixa de entrada (ou spam) para redefinir sua senha.
-                </Text>
-
-                <Pressable
-                  onPress={() => router.replace("/login")}
-                  style={[
-                    styles.button,
-                    {
-                      backgroundColor: theme.colors.primary,
-                      marginTop: 24,
-                    },
-                  ]}
-                >
+              <Pressable
+                onPress={handleReset}
+                disabled={loading}
+                accessibilityLabel="Enviar link de recuperação"
+                style={[
+                  styles.button,
+                  {
+                    backgroundColor: theme.colors.primary,
+                    opacity: loading ? 0.7 : 1,
+                  },
+                ]}
+              >
+                {loading ? (
+                  <ActivityIndicator
+                    color={theme.colors.primaryContrast}
+                  />
+                ) : (
                   <Text
                     style={{
                       color: theme.colors.primaryContrast,
                       fontWeight: "600",
                     }}
                   >
-                    Voltar para o login
+                    Enviar link
                   </Text>
-                </Pressable>
-              </>
-            )}
-          </View>
-        </ScrollView>
+                )}
+              </Pressable>
+
+              <Pressable
+                disabled={loading}
+                onPress={() => router.replace("/login")}
+                style={{ marginTop: 16 }}
+              >
+                <Text
+                  style={{
+                    color: theme.colors.textMuted,
+                    textAlign: "center",
+                  }}
+                >
+                  Voltar para o login
+                </Text>
+              </Pressable>
+            </>
+          ) : (
+            <>
+              <Text
+                style={[
+                  styles.text,
+                  {
+                    color: theme.colors.text,
+                    fontWeight: "600",
+                  },
+                ]}
+              >
+                📧 Email enviado!
+              </Text>
+
+              <Text
+                style={[
+                  styles.text,
+                  {
+                    color: theme.colors.textMuted,
+                    marginTop: 8,
+                  },
+                ]}
+              >
+                Verifique sua caixa de entrada (ou spam) para redefinir sua senha.
+              </Text>
+
+              <Pressable
+                onPress={() => router.replace("/login")}
+                style={[
+                  styles.button,
+                  {
+                    backgroundColor: theme.colors.primary,
+                    marginTop: 24,
+                  },
+                ]}
+              >
+                <Text
+                  style={{
+                    color: theme.colors.primaryContrast,
+                    fontWeight: "600",
+                  }}
+                >
+                  Voltar para o login
+                </Text>
+              </Pressable>
+            </>
+          )}
+        </View>
       </KeyboardAvoidingView>
     </AppScreen>
   );
@@ -227,10 +224,9 @@ export default function ForgotPasswordScreen() {
 ========================= */
 
 const styles = StyleSheet.create({
-  scroll: {
-    flexGrow: 1,
+  container: {
+    flex: 1,
     justifyContent: "center",
-    padding: 16,
   },
   card: {
     width: "100%",

@@ -18,35 +18,29 @@ export default function MemberLayout() {
       }}
     >
       <Tabs.Screen
-        name="index"
-        options={{
-          href: null
-        }}
-      />
-      {/* <Tabs.Screen
-        name="dashboard"
-        options={{
-          title: "Dashboard",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="apps-outline" size={size} color={color} />
-          ),
-        }}
-      /> */}
-      <Tabs.Screen
         name="schedule/consolidate"
         options={{
-          title: "Escala geral",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="documents-outline" size={size} color={color} />
+          title: "Escala",
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? "documents" : "documents-outline"}
+              size={size}
+              color={color}
+            />
           ),
         }}
       />
+
       <Tabs.Screen
         name="availability"
         options={{
           title: "Disponibilidade",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="time-outline" size={size} color={color} />
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? "time" : "time-outline"}
+              size={size}
+              color={color}
+            />
           ),
         }}
       />
@@ -55,15 +49,13 @@ export default function MemberLayout() {
         name="calendar"
         options={{
           title: "Agenda",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="calendar" size={size} color={color} />
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? "calendar" : "calendar-outline"}
+              size={size}
+              color={color}
+            />
           ),
-        }}
-      />
-      <Tabs.Screen
-        name="modal/TurnSelectModal"
-        options={{
-          href: null
         }}
       />
       <Tabs.Screen
