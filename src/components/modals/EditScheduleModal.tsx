@@ -16,14 +16,21 @@ export type EditableMember = {
   id: string;
   name: string;
   status: "confirmed" | "pending";
+
+  // 🔒 controle de regra
+  disabled?: boolean;
+
+  // ⚠️ flags explicativas (não soberanas)
+  flags?: {
+    message: string;
+  }[];
 };
 
 type Props = {
   visible: boolean;
-
   ministryName: string;
   serviceLabel: string;
-  serviceDate: string; // YYYY-MM-DD
+  serviceDate: string;
 
   members: EditableMember[];
   selectedPersonId: string | null;
@@ -37,8 +44,26 @@ type Props = {
    HELPERS
 ========================= */
 
+function sortMembers(members: EditableMember[]) {
+  return [...members].sort((a, b) => {
+    const aDisabled = a.disabled === true;
+    const bDisabled = b.disabled === true;
+
+    // 1️⃣ Disponíveis primeiro
+    if (aDisabled !== bDisabled) {
+      return aDisabled ? 1 : -1;
+    }
+
+    // 2️⃣ Ordem alfabética (primeiro nome)
+    const nameA = a.name.trim().split(" ")[0].toLowerCase();
+    const nameB = b.name.trim().split(" ")[0].toLowerCase();
+
+    return nameA.localeCompare(nameB);
+  });
+}
+
 function firstName(name: string) {
-  return name?.trim().split(" ")[0] ?? "Membro";
+  return name.trim().split(" ")[0];
 }
 
 function formatDatePtBr(dateKey: string) {
@@ -66,122 +91,95 @@ export function EditScheduleModal({
   onSave,
 }: Props) {
   const { theme } = useTheme();
-
-  const orderedMembers = [...members].sort((a, b) =>
-    a.name.localeCompare(b.name, "pt-BR", { sensitivity: "base" })
-  );
+  if (!visible) return null;
 
   return (
-    <Modal visible={visible} transparent animationType="fade">
-      {/* OVERLAY */}
-      <Pressable style={styles.overlay} onPress={onCancel}>
-        {/* MODAL */}
-        <Pressable
+    <Modal visible transparent animationType="fade">
+      <View style={styles.overlay}>
+        <View
           style={[
             styles.modal,
             { backgroundColor: theme.colors.surface },
           ]}
-          onPress={() => {}}
         >
           {/* HEADER */}
           <Text style={[styles.title, { color: theme.colors.text }]}>
             Trocar pessoa — {ministryName}
           </Text>
 
-          <Text
-            style={[
-              styles.subtitle,
-              { color: theme.colors.textMuted },
-            ]}
-          >
+          <Text style={styles.subtitle}>
             {serviceLabel} • {formatDatePtBr(serviceDate)}
           </Text>
 
-          {/* LIST */}
-          {orderedMembers.length === 0 ? (
-            <Text
-              style={[
-                styles.empty,
-                { color: theme.colors.textMuted },
-              ]}
-            >
-              ⚠️ Nenhum membro disponível para este culto.
-            </Text>
-          ) : (
-            <ScrollView
-              style={{ maxHeight: 260 }}
-              showsVerticalScrollIndicator={false}
-            >
-              {orderedMembers.map((m) => {
-                const active = m.id === selectedPersonId;
+          {/* LISTA */}
+          <ScrollView style={{ maxHeight: 280 }}>
+            {sortMembers(members).map((m) => {
+              const active = m.id === selectedPersonId;
 
-                return (
-                  <Pressable
-                    key={m.id}
-                    onPress={() => onSelect(m.id)}
-                    style={[
-                      styles.row,
-                      {
-                        backgroundColor: active
-                          ? theme.colors.primary
-                          : theme.colors.background,
-                        borderColor: active
-                          ? theme.colors.primary
-                          : theme.colors.border,
-                      },
-                    ]}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text
-                        style={{
-                          color: active
-                            ? theme.colors.primaryContrast
-                            : theme.colors.text,
-                          fontWeight: "600",
-                        }}
-                      >
-                        {firstName(m.name)}
-                      </Text>
+              return (
+                <Pressable
+                  key={m.id}
+                  disabled={m.disabled}
+                  onPress={() => !m.disabled && onSelect(m.id)}
+                  style={[
+                    styles.row,
+                    {
+                      opacity: m.disabled ? 0.45 : 1,
+                      backgroundColor: active
+                        ? theme.colors.primary
+                        : theme.colors.background,
+                      borderColor: active
+                        ? theme.colors.primary
+                        : theme.colors.border,
+                    },
+                  ]}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text
+                      style={{
+                        color: active
+                          ? theme.colors.primaryContrast
+                          : theme.colors.text,
+                        fontWeight: "600",
+                      }}
+                    >
+                      {firstName(m.name)}
+                    </Text>
 
+                    {/* FLAGS VISÍVEIS */}
+                    {m.flags?.map((f, i) => (
                       <Text
+                        key={i}
                         style={{
-                          color: active
-                            ? theme.colors.primaryContrast
-                            : theme.colors.textMuted,
+                          marginTop: 2,
                           fontSize: 12,
+                          color: theme.colors.warning,
                         }}
                       >
-                        {m.status === "confirmed"
-                          ? "Disponível"
-                          : "Disponibilidade pendente"}
+                        ⚠ {f.message}
                       </Text>
-                    </View>
+                    ))}
+                  </View>
 
-                    {active && (
-                      <Text
-                        style={{
-                          color: theme.colors.primaryContrast,
-                          fontWeight: "700",
-                        }}
-                      >
-                        ✔
-                      </Text>
-                    )}
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-          )}
+                  {active && (
+                    <Text
+                      style={{
+                        color: theme.colors.primaryContrast,
+                        fontWeight: "700",
+                      }}
+                    >
+                      ✔
+                    </Text>
+                  )}
+                </Pressable>
+              );
+            })}
+          </ScrollView>
 
           {/* ACTIONS */}
           <View style={styles.actions}>
             <Pressable onPress={onCancel}>
-              <Text
-                style={{
-                  color: theme.colors.textMuted,
-                  fontWeight: "600",
-                }}
-              >
+              <Text style={{ color: theme.colors.textMuted }}>
                 Cancelar
               </Text>
             </Pressable>
@@ -196,15 +194,14 @@ export function EditScheduleModal({
                     ? theme.colors.primary
                     : theme.colors.textMuted,
                   fontWeight: "700",
-                  opacity: selectedPersonId ? 1 : 0.6,
                 }}
               >
                 Salvar alteração
               </Text>
             </Pressable>
           </View>
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 }
@@ -235,6 +232,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginBottom: 12,
     fontSize: 13,
+    color: "#888",
     textTransform: "capitalize",
   },
   row: {
@@ -244,11 +242,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 12,
     marginBottom: 8,
-    gap: 12,
-  },
-  empty: {
-    textAlign: "center",
-    marginVertical: 20,
   },
   actions: {
     marginTop: 18,

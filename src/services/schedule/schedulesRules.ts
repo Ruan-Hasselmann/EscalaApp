@@ -1,109 +1,111 @@
-import { doc, getDoc } from "firebase/firestore";
-import { db } from "@/services/firebase";
+import { ScheduleDoc } from "./scheduleGenerator";
 
 /* =========================
-   TYPES
+   FLAGS PARA MODAL
 ========================= */
 
-export type PersonConflictPair = {
-  aUserId: string;
-  bUserId: string;
-};
-
-export type ScheduleRulesConfig = {
-  year: number;
-  month: number; // ✅ sempre 1–12
-
-  // Limites
-  maxAssignmentsPerPerson: number; // soft limit (gera flag/penaliza)
-
-  // Disponibilidade
-  allowPendingAvailability: boolean;
-
-  // Conflitos
-  blockSameServiceDuplicate: boolean;
-  enablePersonConflicts: boolean;
-  personConflicts: PersonConflictPair[];
-
-  // Justiça
-  avoidConsecutiveServices: boolean;
-
-  // Meta
-  updatedAt?: unknown;
-};
-
-/* =========================
-   DEFAULTS
-========================= */
-
-export const DEFAULT_SCHEDULE_RULES: Omit<
-  ScheduleRulesConfig,
-  "year" | "month"
-> = {
-  maxAssignmentsPerPerson: 2,
-  allowPendingAvailability: false,
-
-  blockSameServiceDuplicate: true,
-  enablePersonConflicts: true,
-  personConflicts: [],
-
-  avoidConsecutiveServices: true,
-};
+export type EditableMemberFlag =
+  | {
+    type: "fixed_person_conflict";
+    message: string;
+  }
+  | {
+    type: "same_service_conflict";
+    message: string;
+  }
+  | {
+    type: "same_day_conflict";
+    message: string;
+  }
+    | {
+    type: "same_day_multiple_services";
+    message: string;
+  }
+  | {
+    type: "blocked";
+    message: string;
+  };
 
 /* =========================
    HELPERS
 ========================= */
 
-function assertMonth(month: number) {
-  if (month < 1 || month > 12) {
-    throw new Error(
-      `[scheduleRules] Mês inválido recebido: ${month}. Esperado 1–12`
-    );
-  }
+function normalizeFirstName(name: string) {
+  return (name ?? "").trim().split(" ")[0].toLowerCase();
 }
 
-function rulesDocId(year: number, month: number) {
-  return `${year}-${String(month).padStart(2, "0")}`;
-}
+function isRuanFabianoConflict(nameA: string, nameB: string) {
+  const a = normalizeFirstName(nameA);
+  const b = normalizeFirstName(nameB);
 
-function normalizeRules(
-  year: number,
-  month: number,
-  data?: Partial<ScheduleRulesConfig>
-): ScheduleRulesConfig {
-  return {
-    year,
-    month,
-    ...DEFAULT_SCHEDULE_RULES,
-    ...data,
-    personConflicts: Array.isArray(data?.personConflicts)
-      ? data!.personConflicts
-      : [],
-  };
+  return (
+    (a === "ruan" && b === "fabiano") ||
+    (a === "fabiano" && b === "ruan")
+  );
 }
 
 /* =========================
-   QUERY
+   MAIN EVALUATOR
 ========================= */
 
-export async function getScheduleRulesByMonth(
-  year: number,
-  month: number // 1–12
-): Promise<ScheduleRulesConfig> {
-  assertMonth(month);
+export type EvaluateParams = {
+  candidateUserId: string;
 
-  const ref = doc(db, "scheduleRules", rulesDocId(year, month));
-  const snap = await getDoc(ref);
+  // pessoas já escaladas neste culto (qualquer ministério)
+  assignedUserIdsInService: string[];
 
-  if (!snap.exists()) {
-    console.log(
-      `[scheduleRules] Nenhuma regra encontrada para ${year}/${month}, usando defaults`
-    );
+  // pessoas já escaladas neste dia
+  assignedUserIdsInDay: string[];
 
-    return normalizeRules(year, month);
+  // mapa de nomes (para regra soberana)
+  usersMap: Record<string, { name: string }>;
+};
+
+export function evaluateMemberForSchedule({
+  candidateUserId,
+  assignedUserIdsInService,
+  assignedUserIdsInDay,
+  usersMap,
+}: EvaluateParams): EditableMemberFlag[] {
+  const flags: EditableMemberFlag[] = [];
+
+  /* =====================================================
+     REGRA 0 — RUAN x FABIANO (SOBERANA, OCULTA)
+     ❗ NÃO gera flag visual
+  ====================================================== */
+  for (const otherId of assignedUserIdsInService) {
+    const a = usersMap[candidateUserId]?.name ?? "";
+    const b = usersMap[otherId]?.name ?? "";
+
+    if (isRuanFabianoConflict(a, b)) {
+      return [
+        {
+          type: "blocked",
+          message: "Não é possivel escalar nesse dia",
+        },
+      ];
+    }
   }
 
-  const data = snap.data() as Partial<ScheduleRulesConfig>;
+  /* =====================================================
+     REGRA 1 — MESMO CULTO
+  ====================================================== */
+  if (assignedUserIdsInService.includes(candidateUserId)) {
+    flags.push({
+      type: "same_service_conflict",
+      message: "Já está escalado neste culto.",
+    });
+  }
 
-  return normalizeRules(year, month, data);
+  /* =====================================================
+     REGRA 2 — MESMO DIA
+  ====================================================== */
+  if (assignedUserIdsInDay.includes(candidateUserId)) {
+    flags.push({
+      type: "same_day_multiple_services",
+      message: "Já está escalado em outro culto neste dia.",
+    });
+  }
+
+  return flags;
 }

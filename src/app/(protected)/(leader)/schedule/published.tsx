@@ -279,13 +279,13 @@ export default function LeaderPublishedSchedules() {
 
                     {s.assignments.map((a) => (
                       <Text
-                        key={a.personId}
+                        key={a.userId}
                         style={{
                           color: theme.colors.text,
                           fontSize: 14,
                         }}
                       >
-                        • {firstName(userMap[a.personId]?.name)}
+                        • {firstName(userMap[a.userId]?.name)}
                       </Text>
                     ))}
                   </View>

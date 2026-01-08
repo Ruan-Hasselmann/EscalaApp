@@ -33,7 +33,7 @@ export function ActionListItem({
           backgroundColor: theme.colors.surface,
           opacity: pressed && isClickable ? 0.85 : 1,
           transform:
-            pressed && isClickable ? [{ scale: 0.98 }] : undefined,
+            pressed && isClickable ? [{ scale: 0.98 }] : [],
         },
       ]}
     >

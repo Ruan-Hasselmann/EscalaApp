@@ -15,8 +15,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { listMinistries, Ministry } from "@/services/ministries";
 import { listenUsers, AppUser } from "@/services/users";
 import {
-  listenMemberships,
   listenMembershipsByUser,
+  listenMemberships,
   Membership,
 } from "@/services/memberships";
 
@@ -33,9 +33,22 @@ import {
 } from "@/services/schedule/schedulePublish";
 
 import {
-  EditableMember,
   EditScheduleModal,
+  EditableMember,
 } from "@/components/modals/EditScheduleModal";
+
+import {
+  evaluateMemberForSchedule,
+} from "@/services/schedule/schedulesRules";
+
+/* =========================
+   TYPES
+========================= */
+
+type EditableMemberWithRules = EditableMember & {
+  selectable: boolean;
+  flags: { type: string; message: string }[];
+};
 
 /* =========================
    HELPERS
@@ -58,11 +71,7 @@ function firstName(name?: string) {
 function getNextMonth() {
   const now = new Date();
   const d = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-
-  return {
-    year: d.getFullYear(),
-    month: d.getMonth() + 1,
-  };
+  return { year: d.getFullYear(), month: d.getMonth() + 1 };
 }
 
 /* =========================
@@ -77,23 +86,15 @@ export default function LeaderGenerateSchedule() {
 
   const [ministries, setMinistries] = useState<Ministry[]>([]);
   const [users, setUsers] = useState<AppUser[]>([]);
+  const [memberships, setMemberships] = useState<Membership[]>([]);
   const [myMemberships, setMyMemberships] = useState<Membership[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
 
   const [generating, setGenerating] = useState(false);
+  const [editSchedule, setEditSchedule] = useState<Schedule | null>(null);
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
-
-  const [editTarget, setEditTarget] = useState<{
-    schedule: Schedule;
-  } | null>(null);
-
-  const [allMemberships, setAllMemberships] = useState<Membership[]>([]);
-
-  useEffect(() => {
-    const unsub = listenMemberships(setAllMemberships);
-    return unsub;
-  }, []);
-
+  const [selectedMinistryId, setSelectedMinistryId] =
+    useState<string | "ALL">("ALL");
 
   /* =========================
      LOAD BASE DATA
@@ -105,6 +106,7 @@ export default function LeaderGenerateSchedule() {
     const u1 = listenMembershipsByUser(profile.uid, setMyMemberships);
     const u2 = listenSchedulesByMonth(year, month, setSchedules);
     const u3 = listenUsers(setUsers);
+    const u4 = listenMemberships(setMemberships);
 
     listMinistries().then(setMinistries);
 
@@ -112,20 +114,9 @@ export default function LeaderGenerateSchedule() {
       u1();
       u2();
       u3();
+      u4();
     };
   }, [profile?.uid, year, month]);
-
-  useEffect(() => {
-    if (!editTarget) {
-      setSelectedPersonId(null);
-      return;
-    }
-
-    setSelectedPersonId(
-      editTarget.schedule.assignments[0]?.userId ?? null
-    );
-  }, [editTarget]);
-
 
   /* =========================
      MAPS
@@ -151,8 +142,13 @@ export default function LeaderGenerateSchedule() {
     [myMemberships]
   );
 
+  const leaderMinistries = useMemo(
+    () => ministries.filter((m) => leaderMinistryIds.includes(m.id)),
+    [ministries, leaderMinistryIds]
+  );
+
   /* =========================
-     DRAFT SCHEDULES
+     DRAFTS
   ========================= */
 
   const draftSchedules = useMemo(
@@ -165,6 +161,28 @@ export default function LeaderGenerateSchedule() {
     [schedules, leaderMinistryIds]
   );
 
+  const publishedSchedules = useMemo(
+    () =>
+      schedules.filter(
+        (s) =>
+          s.status === "published" &&
+          leaderMinistryIds.includes(s.ministryId)
+      ),
+    [schedules, leaderMinistryIds]
+  );
+
+  const hasPublishedForSelectedMinistry = useMemo(() => {
+    if (selectedMinistryId === "ALL") {
+      return publishedSchedules.length > 0;
+    }
+
+    return publishedSchedules.some(
+      (s) => s.ministryId === selectedMinistryId
+    );
+  }, [publishedSchedules, selectedMinistryId]);
+
+  const isDisabled = draftSchedules.length === 0;
+
   const grouped = useMemo(() => {
     const map: Record<string, Schedule[]> = {};
     draftSchedules.forEach((s) => {
@@ -176,6 +194,55 @@ export default function LeaderGenerateSchedule() {
   }, [draftSchedules]);
 
   /* =========================
+     MODAL MEMBERS (COM REGRAS)
+  ========================= */
+
+  function buildMembersForModal(
+    schedule: Schedule
+  ): EditableMemberWithRules[] {
+    if (!schedule || !memberships.length || !users.length) return [];
+
+    const assignedUserIdsInService = schedules
+      .filter(
+        (s) =>
+          s.serviceDate === schedule.serviceDate &&
+          s.serviceId === schedule.serviceId
+      )
+      .flatMap((s) => s.assignments.map((a) => a.userId));
+
+    const assignedUserIdsInDay = schedules
+      .filter((s) => s.serviceDate === schedule.serviceDate)
+      .flatMap((s) => s.assignments.map((a) => a.userId));
+
+    return memberships
+      .filter(
+        (m) =>
+          m.ministryId === schedule.ministryId &&
+          m.active
+      )
+      .map((m) => {
+        const user = userMap[m.userId];
+        if (!user) return null;
+
+        const flags = evaluateMemberForSchedule({
+          candidateUserId: m.userId,
+          assignedUserIdsInService,
+          assignedUserIdsInDay,
+          usersMap: userMap,
+        });
+
+        return {
+          id: m.userId,
+          name: user.name,
+          status: "confirmed",
+          selectable: flags.length === 0,
+          flags,
+        };
+      })
+      .filter(Boolean) as EditableMemberWithRules[];
+  }
+
+  /* =========================
      ACTIONS
   ========================= */
 
@@ -184,36 +251,20 @@ export default function LeaderGenerateSchedule() {
 
     setGenerating(true);
     try {
+      const ministryIdsToGenerate =
+        selectedMinistryId === "ALL"
+          ? leaderMinistryIds
+          : [selectedMinistryId];
+
       await generateAndSaveDraftSchedules({
         leaderUserId: profile.uid,
-        ministryIds: leaderMinistryIds,
+        ministryIds: ministryIdsToGenerate,
         year,
         month,
-        overwriteDraft: true,
       });
     } finally {
       setGenerating(false);
     }
-  }
-
-  function buildEditableMembers(schedule: Schedule): EditableMember[] {
-    const ministryId = schedule.ministryId;
-
-    const memberIds = allMemberships
-      .filter(
-        (m) =>
-          m.ministryId === ministryId &&
-          m.active
-      )
-      .map((m) => m.userId);
-
-    return users
-      .filter((u) => memberIds.includes(u.id))
-      .map((u) => ({
-        id: u.id,
-        name: u.name,
-        status: "confirmed",
-      }));
   }
 
   /* =========================
@@ -225,15 +276,68 @@ export default function LeaderGenerateSchedule() {
       <AppHeader title="🗓️ Gerar & revisar escala" back />
 
       <View style={styles.wrapper}>
+
+        {/* SELECT DE MINISTÉRIO */}
+        {leaderMinistries.length > 1 && (
+          <View style={styles.selectWrapper}>
+            <Text style={styles.selectLabel}>Gerar escala para</Text>
+
+            <View style={styles.selectBox}>
+              <Pressable
+                onPress={() => setSelectedMinistryId("ALL")}
+                style={[
+                  styles.selectOption,
+                  selectedMinistryId === "ALL" &&
+                  styles.selectOptionActive,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.selectText,
+                    selectedMinistryId === "ALL" &&
+                    styles.selectTextActive,
+                  ]}
+                >
+                  Todos os meus ministérios
+                </Text>
+              </Pressable>
+
+              {leaderMinistries.map((m) => (
+                <Pressable
+                  key={m.id}
+                  onPress={() => setSelectedMinistryId(m.id)}
+                  style={[
+                    styles.selectOption,
+                    selectedMinistryId === m.id &&
+                    styles.selectOptionActive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.selectText,
+                      selectedMinistryId === m.id &&
+                      styles.selectTextActive,
+                    ]}
+                  >
+                    {m.name}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        )}
+
         {/* GERAR */}
         <Pressable
           onPress={handleGenerate}
-          disabled={generating}
+          disabled={generating || hasPublishedForSelectedMinistry}
           style={[
             styles.generateBtn,
             {
-              backgroundColor: theme.colors.primary,
-              opacity: generating ? 0.6 : 1,
+              backgroundColor: hasPublishedForSelectedMinistry
+                ? theme.colors.border
+                : theme.colors.primary,
+              opacity: generating || hasPublishedForSelectedMinistry ? 0.6 : 1,
             },
           ]}
         >
@@ -242,32 +346,20 @@ export default function LeaderGenerateSchedule() {
           ) : (
             <Text
               style={{
-                color: theme.colors.primaryContrast,
+                color: hasPublishedForSelectedMinistry
+                  ? theme.colors.textMuted
+                  : theme.colors.primaryContrast,
                 fontWeight: "600",
               }}
             >
-              Gerar escala automática
+              {hasPublishedForSelectedMinistry
+                ? "Escala já publicada"
+                : "Gerar escala automática"}
             </Text>
           )}
         </Pressable>
 
-        {/* PUBLICAR TODA */}
-        <Pressable
-          disabled={draftSchedules.length === 0}
-          onPress={() =>
-            publishAllDraftSchedules(year, month, leaderMinistryIds)
-          }
-          style={[
-            styles.publishAllBtn,
-            { borderColor: theme.colors.border },
-          ]}
-        >
-          <Text style={{ color: theme.colors.text, fontWeight: "600" }}>
-            Publicar toda a escala
-          </Text>
-        </Pressable>
-
-        {/* LISTA */}
+        {/* LISTAGEM */}
         {Object.entries(grouped).map(([key, items]) => {
           const ref = items[0];
 
@@ -285,7 +377,6 @@ export default function LeaderGenerateSchedule() {
                     flex: 1,
                     color: theme.colors.text,
                     fontWeight: "600",
-                    textTransform: "capitalize"
                   }}
                 >
                   {formatServiceDate(ref.serviceDate)} • {ref.serviceLabel}
@@ -317,77 +408,113 @@ export default function LeaderGenerateSchedule() {
 
               {items.map((s) => (
                 <View key={s.id} style={styles.assignmentRow}>
-                  <View style={styles.rowHeader}>
+                  <View style={{ flex: 1 }}>
                     <Text style={{ color: theme.colors.textMuted }}>
                       {ministryMap[s.ministryId]?.name}
                     </Text>
 
-                    <Pressable
-                      onPress={() => {
-                        const currentAssigned = s.assignments[0]?.userId ?? null;
-
-                        setEditTarget({
-                          schedule: s,
-                        });
-
-                        setSelectedPersonId(currentAssigned);
-                      }}
-                      style={[
-                        styles.editBtn,
-                        { borderColor: theme.colors.border },
-                      ]}
-                    >
-                      <Text style={{ color: theme.colors.text }}>
-                        Editar
+                    {s.assignments.map((a) => (
+                      <Text
+                        key={a.userId}
+                        style={{ color: theme.colors.text }}
+                      >
+                        • {firstName(userMap[a.userId]?.name)}
                       </Text>
-                    </Pressable>
+                    ))}
                   </View>
 
-                  {s.assignments.map((a) => (
-                    <Text
-                      key={a.userId}
-                      style={{ color: theme.colors.text }}
-                    >
-                      • {firstName(userMap[a.userId]?.name)}
+                  <Pressable
+                    onPress={() => {
+                      setEditSchedule(s);
+                      setSelectedPersonId(
+                        s.assignments[0]?.userId ?? null
+                      );
+                    }}
+                    style={[
+                      styles.editBtn,
+                      { borderColor: theme.colors.border },
+                    ]}
+                  >
+                    <Text style={{ color: theme.colors.text }}>
+                      Editar
                     </Text>
-                  ))}
+                  </Pressable>
                 </View>
               ))}
             </View>
           );
         })}
+
+        {/* PUBLICAR TUDO */}
+        <Pressable
+          disabled={isDisabled}
+          onPress={() =>
+            publishAllDraftSchedules(year, month, leaderMinistryIds)
+          }
+          style={[
+            styles.publishAllBtn,
+            {
+              backgroundColor: isDisabled
+                ? theme.colors.border
+                : theme.colors.primary,
+              opacity: isDisabled ? 0.6 : 1,
+            },
+          ]}
+        >
+          <Text
+            style={{
+              color: isDisabled
+                ? theme.colors.textMuted
+                : theme.colors.primaryContrast,
+              fontWeight: "600",
+            }}
+          >
+            Publicar toda a escala
+          </Text>
+        </Pressable>
       </View>
 
       {/* MODAL */}
-      {editTarget && (
-        <EditScheduleModal
-          visible
-          ministryName={
-            ministryMap[editTarget.schedule.ministryId]?.name ?? "Ministério"
-          }
-          serviceDate={editTarget.schedule.serviceDate}
-          serviceLabel={editTarget.schedule.serviceLabel}
-          members={buildEditableMembers(editTarget.schedule)}
-          selectedPersonId={selectedPersonId}
-          onSelect={setSelectedPersonId}
-          onCancel={() => {
-            setEditTarget(null);
-            setSelectedPersonId(null);
-          }}
-          onSave={async () => {
-            if (!selectedPersonId) return;
+      <EditScheduleModal
+        visible={!!editSchedule}
+        ministryName={
+          ministryMap[editSchedule?.ministryId ?? ""]?.name ?? ""
+        }
+        serviceLabel={editSchedule?.serviceLabel ?? ""}
+        serviceDate={editSchedule?.serviceDate ?? ""}
+        members={
+          editSchedule
+            ? buildMembersForModal(editSchedule)
+            : []
+        }
+        selectedPersonId={selectedPersonId}
+        onSelect={(id) => {
+          const member = editSchedule
+            ? buildMembersForModal(editSchedule).find(
+              (m) => m.id === id
+            )
+            : null;
 
-            await updateScheduleAssignment(
-              editTarget.schedule.id,
-              selectedPersonId,
-              editTarget.schedule.ministryId
-            );
+          if (!member || !member.selectable) return;
+          setSelectedPersonId(id);
+        }}
+        onCancel={() => {
+          setEditSchedule(null);
+          setSelectedPersonId(null);
+        }}
+        onSave={async () => {
+          if (!editSchedule || !selectedPersonId) return;
 
-            setEditTarget(null);
-            setSelectedPersonId(null);
-          }}
-        />
-      )}
+          await updateScheduleAssignment(
+            editSchedule.id,
+            selectedPersonId,
+            editSchedule.ministryId
+          );
+
+          setEditSchedule(null);
+          setSelectedPersonId(null);
+        }}
+      />
     </AppScreen>
   );
 }
@@ -410,7 +537,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   publishAllBtn: {
-    paddingVertical: 12,
+    paddingVertical: 14,
     borderRadius: 12,
     borderWidth: 1,
     alignItems: "center",
@@ -427,18 +554,46 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   assignmentRow: {
-    marginTop: 6,
-    gap: 4,
-  },
-  rowHeader: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
+    gap: 12,
+    marginTop: 6,
   },
   editBtn: {
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 10,
     borderWidth: 1,
+  },
+  selectWrapper: {
+    gap: 6,
+  },
+  selectLabel: {
+    fontSize: 13,
+    color: "#999",
+    fontWeight: "600",
+  },
+  selectBox: {
+    borderWidth: 1,
+    borderColor: "#1f2937",
+    borderRadius: 12,
+    overflow: "hidden",
+  },
+  selectOption: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: "#0b1220",
+    borderBottomWidth: 1,
+    borderBottomColor: "#1f2937",
+  },
+  selectOptionActive: {
+    backgroundColor: "#2563eb",
+  },
+  selectText: {
+    color: "#cbd5e1",
+    fontWeight: "600",
+  },
+  selectTextActive: {
+    color: "#fff",
   },
 });
