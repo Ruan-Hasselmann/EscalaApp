@@ -2,11 +2,14 @@ import {
   collection,
   doc,
   documentId,
+  getDoc,
   getDocs,
   onSnapshot,
   query,
   updateDoc,
   where,
+  orderBy,
+  serverTimestamp,
 } from "firebase/firestore";
 import { db } from "../firebase";
 
@@ -15,6 +18,13 @@ import { db } from "../firebase";
 ========================= */
 
 export type ScheduleStatus = "draft" | "published";
+
+export type ScheduleAssignment = {
+  userId: string;
+  ministryId: string;
+  source: "auto" | "manual";
+  flags?: ScheduleFlag[];
+};
 
 export type ScheduleFlag =
   | {
@@ -38,31 +48,35 @@ export type ScheduleFlag =
     serviceId: string;
   };
 
-export type ScheduleAssignment = {
-  personId: string;
-  ministryId: string;
-  source: "auto" | "manual";
-  flags?: ScheduleFlag[];
-};
-
 export type Schedule = {
   id: string;
   ministryId: string;
   serviceDayId: string;
   serviceId: string;
   serviceLabel: string;
-  serviceDate: string; // YYYY-MM-DD
+  serviceDate: string;
   year: number;
-  month: number; // 🔥 domínio: 1–12
+  month: number; // 1–12
   status: ScheduleStatus;
   assignments: ScheduleAssignment[];
   flags?: ScheduleFlag[];
-  generatedAt: number;
+  generatedAt?: any;
   generatedBy: string;
+  publishedAt?: any;
 };
 
 /* =========================
-   LISTENERS (onSnapshot)
+   HELPERS
+========================= */
+
+function assertMonth(month: number) {
+  if (month < 1 || month > 12) {
+    throw new Error(`[schedules] Mês inválido: ${month}`);
+  }
+}
+
+/* =========================
+   LISTENERS
 ========================= */
 
 export function listenSchedulesByMonth(
@@ -70,149 +84,23 @@ export function listenSchedulesByMonth(
   month: number,
   callback: (items: Schedule[]) => void
 ) {
+  assertMonth(month);
+
   const q = query(
     collection(db, "schedules"),
     where("year", "==", year),
-    where("month", "==", month)
+    where("month", "==", month),
+    orderBy("serviceDate", "asc")
   );
 
   return onSnapshot(q, (snap) => {
-    const items = snap.docs.map((d) => ({
-      id: d.id,
-      ...(d.data() as Omit<Schedule, "id">),
-    }));
-    callback(items);
+    callback(
+      snap.docs.map((d) => ({
+        id: d.id,
+        ...(d.data() as Omit<Schedule, "id">),
+      }))
+    );
   });
-}
-
-export function listenAllSchedulesByMonth(
-  year: number,
-  month: number,
-  callback: (items: Schedule[]) => void
-) {
-  return listenSchedulesByMonth(year, month, callback);
-}
-
-export function listenSchedulesByMinistry(
-  ministryId: string,
-  year: number,
-  month: number,
-  callback: (items: Schedule[]) => void
-) {
-  const q = query(
-    collection(db, "schedules"),
-    where("ministryId", "==", ministryId),
-    where("year", "==", year),
-    where("month", "==", month)
-  );
-
-  return onSnapshot(q, (snap) => {
-    const items = snap.docs.map((d) => ({
-      id: d.id,
-      ...(d.data() as Omit<Schedule, "id">),
-    }));
-    callback(items);
-  });
-}
-
-/* =========================
-   QUERIES (getDocs)
-========================= */
-
-export async function listAllSchedulesByMonth(
-  year: number,
-  month: number
-): Promise<Schedule[]> {
-  const q = query(
-    collection(db, "schedules"),
-    where("year", "==", year),
-    where("month", "==", month)
-  );
-
-  const snap = await getDocs(q);
-
-  return snap.docs.map((d) => ({
-    id: d.id,
-    ...(d.data() as Omit<Schedule, "id">),
-  }));
-}
-
-export async function listPublishedSchedulesByMonth(
-  year: number,
-  month: number
-): Promise<Schedule[]> {
-  const q = query(
-    collection(db, "schedules"),
-    where("status", "==", "published"),
-    where("year", "==", year),
-    where("month", "==", month)
-  );
-
-  const snap = await getDocs(q);
-
-  return snap.docs.map((d) => ({
-    id: d.id,
-    ...(d.data() as Omit<Schedule, "id">),
-  }));
-}
-
-export async function listPublishedSchedulesByMinistryIds(
-  ministryIds: string[],
-  year: number,
-  month: number
-): Promise<Schedule[]> {
-  if (ministryIds.length === 0) return [];
-
-  const q = query(
-    collection(db, "schedules"),
-    where("status", "==", "published"),
-    where("year", "==", year),
-    where("month", "==", month),
-    where("ministryId", "in", ministryIds)
-  );
-
-  const snap = await getDocs(q);
-
-  return snap.docs.map((d) => ({
-    id: d.id,
-    ...(d.data() as Omit<Schedule, "id">),
-  }));
-}
-
-export async function listSchedulesStatusByMonth(
-  year: number,
-  month: number
-): Promise<{ ministryId: string; status: ScheduleStatus }[]> {
-  const q = query(
-    collection(db, "schedules"),
-    where("year", "==", year),
-    where("month", "==", month)
-  );
-
-  const snap = await getDocs(q);
-
-  return snap.docs.map((d) => ({
-    ministryId: d.data().ministryId,
-    status: d.data().status,
-  }));
-}
-
-export async function listSchedulesForSameService(
-  serviceDate: string,
-  serviceId: string
-): Promise<Schedule[]> {
-  const q = query(
-    collection(db, "schedules"),
-    where("serviceDate", "==", serviceDate),
-    where("serviceId", "==", serviceId)
-  );
-
-  const snap = await getDocs(q);
-
-  return snap.docs.map((d) => ({
-    id: d.id,
-    ...(d.data() as Omit<Schedule, "id">),
-  }));
 }
 
 /* =========================
@@ -222,7 +110,7 @@ export async function listSchedulesForSameService(
 export async function publishSchedule(scheduleId: string) {
   await updateDoc(doc(db, "schedules", scheduleId), {
     status: "published",
-    publishedAt: Date.now(),
+    publishedAt: serverTimestamp(),
   });
 }
 
@@ -233,122 +121,84 @@ export async function revertScheduleToDraft(scheduleId: string) {
 }
 
 /* =========================
-   UPDATE ASSIGNMENT
+   UPDATE ASSIGNMENTS (SEGURO)
 ========================= */
 
-const FIXED_NAME_CONFLICTS: [string, string][] = [["ruan", "fabiano"]];
-
-function normalizeFirstName(name: string) {
-  return (name ?? "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .trim()
-    .split(/\s+/)[0];
-}
-
-async function listUserNamesByUids(uids: string[]) {
-  const unique = Array.from(new Set(uids)).filter(Boolean);
-  const map: Record<string, string> = {};
-
-  for (let i = 0; i < unique.length; i += 10) {
-    const q = query(
-      collection(db, "users"),
-      where(documentId(), "in", unique.slice(i, i + 10))
-    );
-    const snap = await getDocs(q);
-    snap.docs.forEach((d) => {
-      map[d.id] = String(d.data().name ?? "");
-    });
-  }
-
-  return map;
-}
+// IDs fixos — NUNCA por nome
+const FIXED_PERSON_CONFLICTS: [string, string][] = [
+  ["UID_RUAN", "UID_FABIANO"],
+];
 
 export async function updateScheduleAssignment(
   scheduleId: string,
-  personId: string
+  userId: string,
+  ministryId: string
 ) {
-  const snap = await getDocs(
-    query(
-      collection(db, "schedules"),
-      where(documentId(), "==", scheduleId)
-    )
-  );
-  if (snap.empty) return;
+  const ref = doc(db, "schedules", scheduleId);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return;
 
-  const schedule = {
-    id: snap.docs[0].id,
-    ...(snap.docs[0].data() as Omit<Schedule, "id">),
-  };
+  const schedule = snap.data() as Schedule;
 
-  const sameService = await listSchedulesForSameService(
-    schedule.serviceDate,
-    schedule.serviceId
-  );
-
-  const assignedUserIds = sameService
-    .flatMap((s) => s.assignments.map((a) => a.personId))
-    .filter((id) => id !== personId);
-
-  const names = await listUserNamesByUids([
-    personId,
-    ...assignedUserIds,
-  ]);
-
-  const myName = normalizeFirstName(names[personId]);
-  const others = assignedUserIds.map((id) =>
-    normalizeFirstName(names[id])
-  );
+  // 🔒 Conflito fixo (mantido)
+  const assignedUserIds = schedule.assignments.map((a) => a.userId);
 
   if (
-    FIXED_NAME_CONFLICTS.some(
+    FIXED_PERSON_CONFLICTS.some(
       ([a, b]) =>
-        (myName === a && others.includes(b)) ||
-        (myName === b && others.includes(a))
+        (userId === a && assignedUserIds.includes(b)) ||
+        (userId === b && assignedUserIds.includes(a))
     )
   ) {
-    throw new Error(
-      "Conflito fixo: Ruan e Fabiano não podem servir juntos neste culto."
-    );
+    throw new Error("Conflito fixo entre pessoas neste culto.");
   }
 
-  await updateDoc(doc(db, "schedules", scheduleId), {
-    assignments: [{ personId, source: "manual" }],
+  // ✅ SUBSTITUI assignment do ministério
+  const nextAssignments: ScheduleAssignment[] = [
+    {
+      userId,
+      ministryId,
+      source: "manual",
+      flags: [],
+    },
+  ];
+
+  await updateDoc(ref, {
+    assignments: nextAssignments,
+    updatedAt: serverTimestamp(),
   });
 }
 
 /* =========================
-   LISTENERS (PUBLICADAS)
+   PUBLISHED ONLY
 ========================= */
 
-// 🔹 Todas as escalas publicadas do mês
 export function listenPublishedSchedulesByMonth(
   year: number,
-  month: number, // 1–12
+  month: number,
   callback: (items: Schedule[]) => void
 ) {
   const q = query(
     collection(db, "schedules"),
-    where("status", "==", "published"),
     where("year", "==", year),
-    where("month", "==", month)
+    where("month", "==", month),
+    where("status", "==", "published")
   );
 
   return onSnapshot(q, (snap) => {
-    const items: Schedule[] = snap.docs.map((d) => ({
-      id: d.id,
-      ...(d.data() as Omit<Schedule, "id">),
-    }));
-    callback(items);
+    callback(
+      snap.docs.map((d) => ({
+        id: d.id,
+        ...(d.data() as Omit<Schedule, "id">),
+      }))
+    );
   });
 }
 
-// 🔹 Escalas publicadas SOMENTE dos ministérios informados
 export function listenPublishedSchedulesByMinistryIds(
   ministryIds: string[],
   year: number,
-  month: number, // 1–12
+  month: number,
   callback: (items: Schedule[]) => void
 ) {
   if (ministryIds.length === 0) {
@@ -358,17 +208,18 @@ export function listenPublishedSchedulesByMinistryIds(
 
   const q = query(
     collection(db, "schedules"),
-    where("status", "==", "published"),
+    where("ministryId", "in", ministryIds),
     where("year", "==", year),
     where("month", "==", month),
-    where("ministryId", "in", ministryIds)
+    where("status", "==", "published")
   );
 
   return onSnapshot(q, (snap) => {
-    const items: Schedule[] = snap.docs.map((d) => ({
-      id: d.id,
-      ...(d.data() as Omit<Schedule, "id">),
-    }));
-    callback(items);
+    callback(
+      snap.docs.map((d) => ({
+        id: d.id,
+        ...(d.data() as Omit<Schedule, "id">),
+      }))
+    );
   });
 }

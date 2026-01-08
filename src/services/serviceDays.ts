@@ -1,12 +1,16 @@
 import {
   collection,
-  deleteDoc,
   doc,
+  getDoc,
   getDocs,
   onSnapshot,
   query,
   setDoc,
+  updateDoc,
   where,
+  writeBatch,
+  serverTimestamp,
+  deleteDoc,
 } from "firebase/firestore";
 import { db } from "./firebase";
 
@@ -24,14 +28,30 @@ export type ServiceTurn = {
 
 export type ServiceDay = {
   id: string;          // dateKey
-  dateKey: string;     // YYYY-MM-DD
+  dateKey: string;
   year: number;
-  month: number;       // 0-11
+  month: number;       // 1–12
   day: number;
   dayOfWeek: number;
   services: ServiceTurn[];
-  createdAt: number;
+  active: boolean;
+  createdAt?: any;
+  updatedAt?: any;
 };
+
+/* =========================
+   HELPERS
+========================= */
+
+function assertMonth(month: number) {
+  if (month < 1 || month > 12) {
+    throw new Error(`[serviceDays] Mês inválido: ${month}`);
+  }
+}
+
+function computeDayOfWeek(year: number, month: number, day: number) {
+  return new Date(year, month - 1, day).getDay();
+}
 
 /* =========================
    UPSERT DIA / TURNO
@@ -52,23 +72,18 @@ export async function upsertServiceDay({
   day,
   service,
 }: UpsertServiceDayInput) {
+  assertMonth(month);
+
   const ref = doc(db, "serviceDays", dateKey);
+  const snap = await getDoc(ref);
 
-  const snap = await getDocs(
-    query(collection(db, "serviceDays"), where("__name__", "==", dateKey))
-  );
+  const existing: ServiceTurn[] = snap.exists()
+    ? snap.data().services ?? []
+    : [];
 
-  let services: ServiceTurn[] = [];
-
-  if (!snap.empty) {
-    services = (snap.docs[0].data().services ?? []) as ServiceTurn[];
-  }
-
-  const exists = services.some((s) => s.id === service.id);
-
-  const next = exists
-    ? services
-    : [...services, service];
+  const services = existing.some((s) => s.id === service.id)
+    ? existing
+    : [...existing, service];
 
   await setDoc(
     ref,
@@ -77,10 +92,11 @@ export async function upsertServiceDay({
       year,
       month,
       day,
-      dayOfWeek: new Date(year, month, day).getDay(),
-      services: next,
-      updatedAt: Date.now(),
-      createdAt: snap.empty ? Date.now() : snap.docs[0].data().createdAt,
+      dayOfWeek: computeDayOfWeek(year, month, day),
+      services,
+      active: true,
+      createdAt: snap.exists() ? snap.data().createdAt : serverTimestamp(),
+      updatedAt: serverTimestamp(),
     },
     { merge: true }
   );
@@ -95,35 +111,37 @@ export async function removeServiceFromDay(
   serviceId: string
 ) {
   const ref = doc(db, "serviceDays", dateKey);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return;
 
-  const snap = await getDocs(
-    query(collection(db, "serviceDays"), where("__name__", "==", dateKey))
-  );
+  const services: ServiceTurn[] = snap.data().services ?? [];
+  const next = services.filter((s) => s.id !== serviceId);
 
-  if (snap.empty) return;
+  // Se não sobrar nenhum culto → desativa o dia
+  if (next.length === 0) {
+    await updateDoc(ref, {
+      active: false,
+      services: [],
+      updatedAt: serverTimestamp(),
+    });
+    return;
+  }
 
-  snap.forEach(async (d) => {
-    const data = d.data();
-    const services: ServiceTurn[] = data.services ?? [];
-
-    const next = services.filter((s) => s.id !== serviceId);
-
-    await setDoc(
-      ref,
-      {
-        services: next,
-      },
-      { merge: true }
-    );
+  await updateDoc(ref, {
+    services: next,
+    updatedAt: serverTimestamp(),
   });
 }
 
 /* =========================
-   DELETAR DIA INTEIRO
+   SOFT DELETE DIA
 ========================= */
 
-export async function deleteServiceDay(dateKey: string) {
-  await deleteDoc(doc(db, "serviceDays", dateKey));
+export async function deactivateServiceDay(dateKey: string) {
+  await updateDoc(doc(db, "serviceDays", dateKey), {
+    active: false,
+    updatedAt: serverTimestamp(),
+  });
 }
 
 /* =========================
@@ -135,6 +153,8 @@ export function listenServiceDaysByMonth(
   month: number,
   callback: (days: ServiceDay[]) => void
 ) {
+  assertMonth(month);
+
   const q = query(
     collection(db, "serviceDays"),
     where("year", "==", year),
@@ -142,113 +162,109 @@ export function listenServiceDaysByMonth(
   );
 
   return onSnapshot(q, (snap) => {
-    const days: ServiceDay[] = snap.docs.map((d) => ({
-      id: d.id,
-      ...(d.data() as Omit<ServiceDay, "id">),
-    }));
+    const days = snap.docs
+      .map((d) => ({ id: d.id, ...(d.data() as Omit<ServiceDay, "id">) }))
+      .sort((a, b) => a.day - b.day);
 
     callback(days);
   });
 }
 
 /* =========================
-   LISTAR DIAS ATIVOS (LÍDER / MEMBRO)
+   LISTAR DIAS ATIVOS
 ========================= */
 
 export async function listActiveServiceDaysByMonth(
   year: number,
   month: number
 ): Promise<ServiceDay[]> {
+  assertMonth(month);
+
   const q = query(
     collection(db, "serviceDays"),
     where("year", "==", year),
     where("month", "==", month),
+    where("active", "==", true)
   );
 
   const snap = await getDocs(q);
 
-  return snap.docs.map((d) => ({
-    id: d.id,
-    ...(d.data() as Omit<ServiceDay, "id">),
-  }));
+  return snap.docs
+    .map((d) => ({ id: d.id, ...(d.data() as Omit<ServiceDay, "id">) }))
+    .sort((a, b) => a.day - b.day);
 }
+
+/* =========================
+   COPIAR MÊS ANTERIOR (BATCH)
+========================= */
 
 export async function copyServiceDaysFromPreviousMonthByOrder(
   year: number,
   month: number
 ) {
-  const prev = new Date(year, month - 1, 1);
-  const prevYear = prev.getFullYear();
-  const prevMonth = prev.getMonth();
+  assertMonth(month);
 
-  // 1️⃣ Busca dias do mês anterior
-  const q = query(
-    collection(db, "serviceDays"),
-    where("year", "==", prevYear),
-    where("month", "==", prevMonth)
+  const prev = new Date(year, month - 2, 1);
+  const prevYear = prev.getFullYear();
+  const prevMonth = prev.getMonth() + 1;
+
+  const snap = await getDocs(
+    query(
+      collection(db, "serviceDays"),
+      where("year", "==", prevYear),
+      where("month", "==", prevMonth),
+      where("active", "==", true)
+    )
   );
 
-  const snap = await getDocs(q);
   if (snap.empty) return;
 
-  /**
-   * Estrutura:
-   * {
-   *   [dayOfWeek]: {
-   *     [order]: ServiceDay
-   *   }
-   * }
-   */
+  const batch = writeBatch(db);
+  const lastDay = new Date(year, month, 0).getDate();
+
   const byWeekAndOrder: Record<number, Record<number, ServiceDay>> = {};
 
   snap.docs.forEach((d) => {
     const data = d.data() as ServiceDay;
-
     const order = Math.floor((data.day - 1) / 7) + 1;
 
-    if (!byWeekAndOrder[data.dayOfWeek]) {
-      byWeekAndOrder[data.dayOfWeek] = {};
-    }
-
+    byWeekAndOrder[data.dayOfWeek] ??= {};
     byWeekAndOrder[data.dayOfWeek][order] = data;
   });
 
-  // 2️⃣ Percorre dias do mês atual
-  const lastDay = new Date(year, month + 1, 0).getDate();
-
-  function toDateKey(date: Date) {
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, "0");
-    const d = String(date.getDate()).padStart(2, "0");
-    return `${y}-${m}-${d}`;
-  }
-
   for (let day = 1; day <= lastDay; day++) {
-    const date = new Date(year, month, day);
-    const dayOfWeek = date.getDay();
+    const date = new Date(year, month - 1, day);
+    const dow = date.getDay();
     const order = Math.floor((day - 1) / 7) + 1;
 
-    const source = byWeekAndOrder[dayOfWeek]?.[order];
+    const source = byWeekAndOrder[dow]?.[order];
     if (!source) continue;
 
-    const dateKey = toDateKey(date);
+    const dateKey = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
     const ref = doc(db, "serviceDays", dateKey);
 
-    // não sobrescreve se já existir
-    const exists = await getDocs(
-      query(collection(db, "serviceDays"), where("__name__", "==", dateKey))
-    );
-    if (!exists.empty) continue;
+    const exists = await getDoc(ref);
+    if (exists.exists()) continue;
 
-    await setDoc(ref, {
+    batch.set(ref, {
       dateKey,
       year,
       month,
       day,
-      dayOfWeek,
+      dayOfWeek: dow,
       services: source.services,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
+      active: true,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
     });
   }
+
+  await batch.commit();
+}
+/* =========================
+   DELETE DAY
+========================= */
+
+export async function deleteServiceDay(dateKey: string) {
+  await deleteDoc(doc(db, "serviceDays", dateKey));
 }

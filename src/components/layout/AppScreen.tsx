@@ -1,16 +1,29 @@
 import { useTheme } from "@/contexts/ThemeContext";
 import { ReactNode } from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
+import {
+  ScrollView,
+  StyleSheet,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-
 
 type Props = {
   children: ReactNode;
   padded?: boolean;
+  scrollable?: boolean;
 };
 
-export function AppScreen({ children, padded = true }: Props) {
+export function AppScreen({
+  children,
+  padded = true,
+  scrollable = true,
+}: Props) {
   const { theme } = useTheme();
+
+  const contentStyle = [
+    styles.content,
+    padded && { padding: theme.spacing.md },
+  ];
 
   return (
     <SafeAreaView
@@ -19,19 +32,18 @@ export function AppScreen({ children, padded = true }: Props) {
         { backgroundColor: theme.colors.background },
       ]}
     >
-      <View
-        style={[
-          styles.container,
-          padded && { padding: theme.spacing.md },
-        ]}
-      >
+      {scrollable ? (
         <ScrollView
-          showsVerticalScrollIndicator={false} // Esconde a barra vertical
-          showsHorizontalScrollIndicator={false} // Esconde a barra horizontal (se houver)
-          style={{ flex: 1 }}>
+          style={styles.flex}
+          contentContainerStyle={contentStyle}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
           {children}
         </ScrollView>
-      </View>
+      ) : (
+        <View style={contentStyle}>{children}</View>
+      )}
     </SafeAreaView>
   );
 }
@@ -40,7 +52,10 @@ const styles = StyleSheet.create({
   safe: {
     flex: 1,
   },
-  container: {
+  flex: {
     flex: 1,
+  },
+  content: {
+    flexGrow: 1,
   },
 });

@@ -1,24 +1,37 @@
-import { doc, getDoc, onSnapshot, setDoc } from "firebase/firestore";
+import {
+  doc,
+  getDoc,
+  onSnapshot,
+  setDoc,
+  serverTimestamp,
+} from "firebase/firestore";
 import { db } from "./firebase";
 
 /* =========================
-   TYPES
+   DOMAIN TYPES
 ========================= */
+
+/**
+ * REGRA DO SISTEMA:
+ * - Existe UMA única janela de disponibilidade
+ * - Documento fixo: availabilityWindows/current
+ * - A disponibilidade SEMPRE vale para o mês seguinte
+ */
 
 export type AvailabilityWindow = {
   startDate: string; // YYYY-MM-DD
   endDate: string;   // YYYY-MM-DD
   open: boolean;
-  updatedAt: number;
+  updatedAt?: any;
 };
 
 /**
  * Janela resolvida (DERIVADA)
- * Não é salva no Firestore
+ * NÃO é salva no Firestore
  */
 export type AvailabilityWindowResolved = AvailabilityWindow & {
   targetYear: number;
-  targetMonth: number; // 0-based
+  targetMonth: number; // 1–12 (DOMÍNIO)
 };
 
 const REF = doc(db, "availabilityWindows", "current");
@@ -27,18 +40,17 @@ const REF = doc(db, "availabilityWindows", "current");
    HELPERS
 ========================= */
 
-function getTargetMonth() {
+/**
+ * Retorna o mês de domínio (1–12)
+ * para o qual a disponibilidade será aplicada
+ */
+function getNextMonthTarget() {
   const now = new Date();
-
-  const target = new Date(
-    now.getFullYear(),
-    now.getMonth() + 1,
-    1
-  );
+  const target = new Date(now.getFullYear(), now.getMonth() + 1, 1);
 
   return {
     year: target.getFullYear(),
-    month: target.getMonth(),
+    month: target.getMonth() + 1, // 🔥 domínio 1–12
   };
 }
 
@@ -51,7 +63,7 @@ export async function setAvailabilityWindow(
 ) {
   await setDoc(REF, {
     ...data,
-    updatedAt: Date.now(),
+    updatedAt: serverTimestamp(),
   });
 }
 
@@ -63,7 +75,7 @@ export async function toggleAvailability(open: boolean) {
     REF,
     {
       open,
-      updatedAt: Date.now(),
+      updatedAt: serverTimestamp(),
     },
     { merge: true }
   );
@@ -83,8 +95,7 @@ export function listenAvailabilityWindow(
     }
 
     const data = snap.data() as AvailabilityWindow;
-
-    const { year, month } = getTargetMonth();
+    const { year, month } = getNextMonthTarget();
 
     callback({
       ...data,
@@ -95,22 +106,13 @@ export function listenAvailabilityWindow(
 }
 
 /* =========================
-   TARGET MONTH (DOMAIN RULE)
-   Disponibilidade sempre vale
-   para o mês seguinte
+   DOMAIN HELPER
 ========================= */
 
+/**
+ * Retorna o mês/ano alvo (1–12)
+ * usado pela UI e pelas validações de disponibilidade
+ */
 export function getCurrentAvailabilityTarget() {
-  const now = new Date();
-
-  const target = new Date(
-    now.getFullYear(),
-    now.getMonth() + 1,
-    1
-  );
-
-  return {
-    year: target.getFullYear(),
-    month: target.getMonth(), // 0-11
-  };
+  return getNextMonthTarget();
 }

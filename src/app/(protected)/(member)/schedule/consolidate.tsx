@@ -46,6 +46,7 @@ function formatDatePtBr(dateKey: string) {
 }
 
 function monthLabel(year: number, month: number) {
+  // month = 1–12
   return new Date(year, month - 1, 1).toLocaleDateString("pt-BR", {
     month: "long",
     year: "numeric",
@@ -80,7 +81,7 @@ export default function PublishedScheduleScreen() {
 
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
-  const [month, setMonth] = useState(today.getMonth() + 1); // 1–12
+  const [month, setMonth] = useState(today.getMonth() + 1); // ✅ 1–12
 
   const [loading, setLoading] = useState(true);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
@@ -90,14 +91,17 @@ export default function PublishedScheduleScreen() {
   const [generalPublished, setGeneralPublished] = useState(false);
 
   /* =========================
-     MEMBERSHIPS
+     MEMBERSHIPS (ACTIVE ONLY)
   ========================= */
 
   useEffect(() => {
     if (!profile?.uid) return;
-    return listenMembershipsByUser(profile.uid, (items) =>
-      setMinistryIds(items.map((m) => m.ministryId))
-    );
+
+    return listenMembershipsByUser(profile.uid, (items) => {
+      setMinistryIds(
+        items.filter((m) => m.active).map((m) => m.ministryId)
+      );
+    });
   }, [profile?.uid]);
 
   /* =========================
@@ -115,25 +119,24 @@ export default function PublishedScheduleScreen() {
   }, [year, month]);
 
   /* =========================
-     LOAD SCHEDULES (ON SNAPSHOT)
+     LOAD SCHEDULES
   ========================= */
 
   useEffect(() => {
-    if (!profile || ministryIds.length === 0) return;
-
-    setLoading(true);
+    if (!profile || ministryIds.length === 0) {
+      setLoading(false);
+      return;
+    }
 
     let unsubscribe: () => void;
 
     if (generalPublished) {
-      // ✅ Escala geral publicada → vê tudo
       unsubscribe = listenPublishedSchedulesByMonth(
         year,
         month,
         setSchedules
       );
     } else {
-      // 🔒 Antes da geral → só ministérios do membro
       unsubscribe = listenPublishedSchedulesByMinistryIds(
         ministryIds,
         year,
@@ -143,7 +146,7 @@ export default function PublishedScheduleScreen() {
     }
 
     return () => unsubscribe?.();
-  }, [profile, ministryIds.join(","), year, month, generalPublished]);
+  }, [profile, ministryIds, year, month, generalPublished]);
 
   /* =========================
      LOAD NAMES & MINISTRIES
@@ -154,7 +157,7 @@ export default function PublishedScheduleScreen() {
       const personIds = Array.from(
         new Set(
           schedules.flatMap((s) =>
-            s.assignments.map((a) => a.personId)
+            s.assignments.map((a) => a.userId)
           )
         )
       );
@@ -169,28 +172,20 @@ export default function PublishedScheduleScreen() {
       setLoading(false);
     }
 
-    if (schedules.length >= 0) loadMaps();
+    if (schedules.length > 0) {
+      loadMaps();
+    } else {
+      setLoading(false);
+    }
   }, [schedules]);
 
-  /* =========================
-     VIEW MODEL
-  ========================= */
-
   const grouped = useMemo(() => groupByService(schedules), [schedules]);
-
-  /* =========================
-     NAVIGATION
-  ========================= */
 
   function goTo(offset: number) {
     const d = new Date(year, month - 1 + offset, 1);
     setYear(d.getFullYear());
     setMonth(d.getMonth() + 1);
   }
-
-  /* =========================
-     STYLES
-  ========================= */
 
   const styles = useMemo(
     () =>
@@ -235,7 +230,7 @@ export default function PublishedScheduleScreen() {
           fontSize: 15,
           fontWeight: "700",
           color: theme.colors.text,
-          textTransform: "capitalize"
+          textTransform: "capitalize",
         },
         ministry: {
           marginTop: 6,
@@ -256,10 +251,6 @@ export default function PublishedScheduleScreen() {
     [theme]
   );
 
-  /* =========================
-     RENDER
-  ========================= */
-
   return (
     <AppScreen>
       <AppHeader title="Escalas Publicadas" back />
@@ -270,7 +261,7 @@ export default function PublishedScheduleScreen() {
         </Pressable>
 
         <Text style={styles.monthTitle}>
-          {monthLabel(year, month + 1)}
+          {monthLabel(year, month)}
         </Text>
 
         <Pressable onPress={() => goTo(1)} style={styles.navBtn}>
@@ -282,7 +273,9 @@ export default function PublishedScheduleScreen() {
         <ActivityIndicator style={{ marginTop: 24 }} />
       ) : grouped.length === 0 ? (
         <Text style={styles.empty}>
-          Escala ainda não publicada.
+          {generalPublished
+            ? "Nenhuma escala encontrada para este mês."
+            : "A escala geral ainda não foi publicada."}
         </Text>
       ) : (
         <ScrollView style={styles.wrapper}>
@@ -299,8 +292,8 @@ export default function PublishedScheduleScreen() {
                   </Text>
 
                   {s.assignments.map((a) => (
-                    <Text key={a.personId} style={styles.person}>
-                      • {firstName(peopleNames[a.personId])}
+                    <Text key={a.userId} style={styles.person}>
+                      • {firstName(peopleNames[a.userId])}
                     </Text>
                   ))}
                 </View>

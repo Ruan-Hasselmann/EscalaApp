@@ -8,16 +8,25 @@ import {
   View,
   ActivityIndicator,
 } from "react-native";
+
 import { useTheme } from "@/contexts/ThemeContext";
 import { Ministry } from "@/services/ministries";
 import { addDoc, collection, doc, updateDoc } from "firebase/firestore";
 import { db } from "@/services/firebase";
+
+/* =========================
+   TYPES
+========================= */
 
 type Props = {
   visible: boolean;
   ministry: Ministry | null;
   onClose: () => void;
 };
+
+/* =========================
+   COMPONENT
+========================= */
 
 export default function MinistryModal({
   visible,
@@ -35,31 +44,38 @@ export default function MinistryModal({
   ========================= */
 
   useEffect(() => {
-    if (!visible) return;
+    if (!visible) {
+      // reset defensivo
+      setName("");
+      setDescription("");
+      setSaving(false);
+      return;
+    }
 
     setName(ministry?.name ?? "");
     setDescription(ministry?.description ?? "");
-  }, [ministry, visible]);
+  }, [visible, ministry?.id]);
 
   /* =========================
-     ACTION
+     ACTIONS
   ========================= */
 
-  async function handleSave() {
+  async function saveMinistry() {
     if (!name.trim() || saving) return;
 
-    try {
-      setSaving(true);
+    const payload = {
+      name: name.trim(),
+      description: description.trim(),
+    };
 
+    setSaving(true);
+
+    try {
       if (ministry) {
-        await updateDoc(doc(db, "ministries", ministry.id), {
-          name: name.trim(),
-          description: description.trim(),
-        });
+        await updateDoc(doc(db, "ministries", ministry.id), payload);
       } else {
         await addDoc(collection(db, "ministries"), {
-          name: name.trim(),
-          description: description.trim(),
+          ...payload,
           active: true,
         });
       }
@@ -94,6 +110,7 @@ export default function MinistryModal({
             onChangeText={setName}
             placeholder="Nome do ministério"
             placeholderTextColor={theme.colors.textMuted}
+            editable={!saving}
             style={[
               styles.input,
               {
@@ -109,6 +126,7 @@ export default function MinistryModal({
             onChangeText={setDescription}
             placeholder="Descrição (opcional)"
             placeholderTextColor={theme.colors.textMuted}
+            editable={!saving}
             multiline
             style={[
               styles.input,
@@ -116,6 +134,7 @@ export default function MinistryModal({
                 borderColor: theme.colors.border,
                 color: theme.colors.text,
                 minHeight: 80,
+                textAlignVertical: "top",
               },
             ]}
           />
@@ -139,7 +158,7 @@ export default function MinistryModal({
             </Pressable>
 
             <Pressable
-              onPress={handleSave}
+              onPress={saveMinistry}
               disabled={!name.trim() || saving}
               style={[
                 styles.btn,

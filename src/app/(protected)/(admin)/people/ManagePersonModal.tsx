@@ -2,8 +2,13 @@ import { useEffect, useMemo, useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useTheme } from "@/contexts/ThemeContext";
-
-import { addUserRole, AppUser, removeUserRole, toggleAdminRole, toggleUserActive } from "@/services/users";
+import {
+  addUserRole,
+  AppUser,
+  removeUserRole,
+  toggleAdminRole,
+  toggleUserActive,
+} from "@/services/users";
 import {
   Membership,
   upsertMembership,
@@ -39,10 +44,10 @@ export function ManagePersonModal({
 
   const [isAdminLocal, setIsAdminLocal] = useState(false);
   const [isActiveLocal, setIsActiveLocal] = useState(true);
-  const [saving, setSaving] = useState<null | "admin" | "active">(null);
+  const [saving, setSaving] = useState<null | "admin" | "active" | "membership">(null);
 
   /* =========================
-     SYNC LOCAL STATES
+     SYNC LOCAL STATE
   ========================= */
 
   useEffect(() => {
@@ -51,7 +56,7 @@ export function ManagePersonModal({
     setIsAdminLocal(user.roles?.includes("admin") ?? false);
     setIsActiveLocal(!!user.active);
     setSaving(null);
-  }, [visible, user?.id]); // importante: trocar usuário reseta estado
+  }, [visible, user?.id]);
 
   /* =========================
      DERIVED DATA
@@ -79,24 +84,34 @@ export function ManagePersonModal({
   const currentUser = user;
 
   /* =========================
+     HELPERS
+  ========================= */
+
+  function hasOtherLeaderMembership(exceptMinistryId?: string) {
+    return userMemberships.some(
+      (m) =>
+        m.role === "leader" &&
+        m.active &&
+        m.ministryId !== exceptMinistryId
+    );
+  }
+
+  /* =========================
      ACTIONS
   ========================= */
 
   async function handleToggleActive() {
     if (saving) return;
+    if (currentUser.roles.includes("admin")) return; // 🔒 admin não se desativa
 
     const next = !isActiveLocal;
-
-    // optimistic UI
     setIsActiveLocal(next);
     setSaving("active");
 
     try {
       await toggleUserActive(currentUser.id, next);
-    } catch (e) {
-      // rollback se falhar
+    } catch {
       setIsActiveLocal(!next);
-      throw e;
     } finally {
       setSaving(null);
     }
@@ -106,43 +121,68 @@ export function ManagePersonModal({
     if (saving) return;
 
     const next = !isAdminLocal;
-
-    // optimistic UI
     setIsAdminLocal(next);
     setSaving("admin");
 
     try {
-      // ✅ aqui é NEXT, não o inverso
       await toggleAdminRole(currentUser.id, next);
-    } catch (e) {
-      // rollback se falhar
+    } catch {
       setIsAdminLocal(!next);
-      throw e;
     } finally {
       setSaving(null);
     }
   }
 
   async function handleAdd(ministryId: string) {
-    await upsertMembership(currentUser.id, ministryId, "member");
+    if (saving) return;
+
+    setSaving("membership");
+    try {
+      await upsertMembership(currentUser.id, ministryId, "member");
+    } finally {
+      setSaving(null);
+    }
   }
 
   async function handleRemove(ministryId: string) {
+    if (saving) return;
+
     const m = membershipByMinistry[ministryId];
     if (!m) return;
-    await removeMembership(m.id);
+
+    setSaving("membership");
+    try {
+      await removeMembership(m.id);
+
+      if (m.role === "leader" && !hasOtherLeaderMembership(ministryId)) {
+        await removeUserRole(currentUser.id, "leader");
+      }
+    } finally {
+      setSaving(null);
+    }
   }
 
-  async function handleChangeRole(ministryId: string, role: "member" | "leader") {
+  async function handleChangeRole(
+    ministryId: string,
+    role: "member" | "leader"
+  ) {
+    if (saving) return;
+
     const m = membershipByMinistry[ministryId];
     if (!m) return;
-    await updateMembershipRole(m.id, role);
-    if (role === "leader"){
-      await addUserRole(currentUser.id, role)
-    } else {
-      await removeUserRole(currentUser.id, "leader")
+
+    setSaving("membership");
+    try {
+      await updateMembershipRole(m.id, role);
+
+      if (role === "leader") {
+        await addUserRole(currentUser.id, "leader");
+      } else if (!hasOtherLeaderMembership(ministryId)) {
+        await removeUserRole(currentUser.id, "leader");
+      }
+    } finally {
+      setSaving(null);
     }
-    
   }
 
   /* =========================
@@ -153,7 +193,6 @@ export function ManagePersonModal({
     <Modal visible={visible} transparent animationType="fade">
       <View style={styles.overlay}>
         <View style={[styles.modal, { backgroundColor: theme.colors.surface }]}>
-          {/* HEADER */}
           <Text style={[styles.name, { color: theme.colors.text }]}>
             {currentUser.name}
           </Text>
@@ -165,7 +204,7 @@ export function ManagePersonModal({
           {/* ACTIVE */}
           <Pressable
             onPress={handleToggleActive}
-            disabled={saving === "active"}
+            disabled={saving !== null || currentUser.roles.includes("admin")}
             style={[
               styles.activeBtn,
               {
@@ -173,7 +212,10 @@ export function ManagePersonModal({
                   ? theme.colors.success
                   : theme.colors.background,
                 borderColor: theme.colors.border,
-                opacity: saving === "active" ? 0.6 : 1,
+                opacity:
+                  saving !== null || currentUser.roles.includes("admin")
+                    ? 0.5
+                    : 1,
               },
             ]}
           >
@@ -189,14 +231,14 @@ export function ManagePersonModal({
             </Text>
           </Pressable>
 
-          {/* ADMIN ROLE */}
+          {/* ADMIN */}
           <Text style={[styles.section, { color: theme.colors.textMuted }]}>
             Acesso Administrativo
           </Text>
 
           <Pressable
             onPress={handleToggleAdmin}
-            disabled={saving === "admin"}
+            disabled={saving !== null}
             style={[
               styles.adminBtn,
               {
@@ -204,7 +246,7 @@ export function ManagePersonModal({
                   ? theme.colors.primary
                   : theme.colors.background,
                 borderColor: theme.colors.border,
-                opacity: saving === "admin" ? 0.6 : 1,
+                opacity: saving !== null ? 0.6 : 1,
               },
             ]}
           >
@@ -238,11 +280,15 @@ export function ManagePersonModal({
                 </Text>
 
                 {!m ? (
-                  <Pressable onPress={() => handleAdd(min.id)}>
+                  <Pressable
+                    disabled={saving !== null}
+                    onPress={() => handleAdd(min.id)}
+                  >
                     <Text
                       style={{
                         color: theme.colors.primary,
                         fontWeight: "600",
+                        opacity: saving ? 0.6 : 1,
                       }}
                     >
                       Adicionar
@@ -251,6 +297,7 @@ export function ManagePersonModal({
                 ) : (
                   <View style={styles.actions}>
                     <Pressable
+                      disabled={saving !== null}
                       onPress={() =>
                         handleChangeRole(
                           min.id,
@@ -264,6 +311,7 @@ export function ManagePersonModal({
                             m.role === "leader"
                               ? theme.colors.primary
                               : theme.colors.background,
+                          opacity: saving ? 0.6 : 1,
                         },
                       ]}
                     >
@@ -280,11 +328,15 @@ export function ManagePersonModal({
                       </Text>
                     </Pressable>
 
-                    <Pressable onPress={() => handleRemove(min.id)}>
+                    <Pressable
+                      disabled={saving !== null}
+                      onPress={() => handleRemove(min.id)}
+                    >
                       <Text
                         style={{
                           color: theme.colors.danger,
                           fontWeight: "600",
+                          opacity: saving ? 0.6 : 1,
                         }}
                       >
                         Remover
@@ -296,7 +348,6 @@ export function ManagePersonModal({
             );
           })}
 
-          {/* FOOTER */}
           <Pressable
             onPress={onClose}
             style={[styles.closeBtn, { borderColor: theme.colors.border }]}

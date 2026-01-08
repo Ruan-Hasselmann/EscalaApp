@@ -8,7 +8,6 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  ScrollView,
 } from "react-native";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import {
@@ -64,15 +63,17 @@ export default function RegisterScreen() {
 
   async function handleRegister() {
     if (loading) return;
-
     setError(null);
 
-    if (!name || !email || !password || !confirmPassword) {
+    const safeName = name.trim();
+    const safeEmail = email.trim().toLowerCase();
+
+    if (!safeName || !safeEmail || !password || !confirmPassword) {
       setError("Preencha todos os campos.");
       return;
     }
 
-    if (!isValidEmail(email)) {
+    if (!isValidEmail(safeEmail)) {
       setError("Email inválido.");
       return;
     }
@@ -93,50 +94,53 @@ export default function RegisterScreen() {
       return;
     }
 
+    let uid: string | null = null;
+
     try {
       setLoading(true);
 
       // 1️⃣ Auth
       const cred = await createUserWithEmailAndPassword(
         auth,
-        email.trim(),
+        safeEmail,
         password
       );
 
-      const uid = cred.user.uid;
+      uid = cred.user.uid;
 
-      try {
-        // 2️⃣ users
-        await setDoc(doc(db, "users", uid), {
-          uid,
-          name,
-          email,
-          roles: ["member"],
-          active: true,
-          createdAt: serverTimestamp(),
-          activeRole: "member"
-        });
+      // 2️⃣ users
+      await setDoc(doc(db, "users", uid), {
+        name: safeName,
+        email: safeEmail,
+        roles: ["member"],
+        activeRole: "member",
+        active: true,
+        createdAt: serverTimestamp(),
+      });
 
-        // 3️⃣ people
-        await setDoc(doc(db, "people", uid), {
-          uid,
-          name,
-          email,
-          whatsapp: phone,
-          active: true,
-          createdAt: serverTimestamp(),
-        });
-      } catch (firestoreError) {
-        // 🔥 rollback se falhar
+      // 3️⃣ people
+      await setDoc(doc(db, "people", uid), {
+        name: safeName,
+        email: safeEmail,
+        whatsapp: phone,
+        active: true,
+        createdAt: serverTimestamp(),
+      });
+
+      // 4️⃣ Redirect
+      router.replace("/(protected)/(member)/dashboard");
+    } catch (e: any) {
+      console.error(e);
+
+      if (uid) {
         await deleteDoc(doc(db, "users", uid)).catch(() => {});
-        throw firestoreError;
       }
 
-      // 4️⃣ Redireciona
-      router.replace("/(protected)/(member)/dashboard");
-    } catch (e) {
-      console.error(e);
-      setError("Erro ao criar conta. Verifique os dados.");
+      if (e?.code === "auth/email-already-in-use") {
+        setError("Este email já está em uso.");
+      } else {
+        setError("Erro ao criar conta. Tente novamente.");
+      }
     } finally {
       setLoading(false);
     }
@@ -145,134 +149,126 @@ export default function RegisterScreen() {
   return (
     <AppScreen>
       <KeyboardAvoidingView
-        style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
+        style={styles.container}
       >
-        <ScrollView
-          contentContainerStyle={styles.scroll}
-          keyboardShouldPersistTaps="handled"
-        >
-          <View style={styles.card}>
-            {/* HEADER */}
-            <Text style={[styles.title, { color: theme.colors.text }]}>
-              📝 Criar conta
+        <View style={styles.card}>
+          <Text style={[styles.title, { color: theme.colors.text }]}>
+            📝 Criar conta
+          </Text>
+
+          <Text
+            style={[
+              styles.subtitle,
+              { color: theme.colors.textMuted },
+            ]}
+          >
+            Crie sua conta para acessar o sistema
+          </Text>
+
+          <TextInput
+            placeholder="Nome completo"
+            value={name}
+            onChangeText={setName}
+            editable={!loading}
+            textContentType="name"
+            style={[
+              styles.input,
+              { borderColor: theme.colors.border, color: theme.colors.text },
+            ]}
+            placeholderTextColor={theme.colors.textMuted}
+          />
+
+          <TextInput
+            placeholder="Email"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            value={email}
+            onChangeText={setEmail}
+            editable={!loading}
+            textContentType="emailAddress"
+            style={[
+              styles.input,
+              { borderColor: theme.colors.border, color: theme.colors.text },
+            ]}
+            placeholderTextColor={theme.colors.textMuted}
+          />
+
+          <TextInput
+            placeholder="WhatsApp (DDD + número)"
+            keyboardType="phone-pad"
+            value={whatsapp}
+            onChangeText={(v) => setWhatsapp(formatWhatsapp(v))}
+            editable={!loading}
+            textContentType="telephoneNumber"
+            style={[
+              styles.input,
+              { borderColor: theme.colors.border, color: theme.colors.text },
+            ]}
+            placeholderTextColor={theme.colors.textMuted}
+          />
+
+          <TextInput
+            placeholder="Senha"
+            secureTextEntry
+            value={password}
+            onChangeText={setPassword}
+            editable={!loading}
+            textContentType="newPassword"
+            style={[
+              styles.input,
+              { borderColor: theme.colors.border, color: theme.colors.text },
+            ]}
+            placeholderTextColor={theme.colors.textMuted}
+          />
+
+          <TextInput
+            placeholder="Repetir senha"
+            secureTextEntry
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+            editable={!loading}
+            textContentType="newPassword"
+            onSubmitEditing={handleRegister}
+            style={[
+              styles.input,
+              { borderColor: theme.colors.border, color: theme.colors.text },
+            ]}
+            placeholderTextColor={theme.colors.textMuted}
+          />
+
+          {error && (
+            <Text style={[styles.error, { color: theme.colors.danger }]}>
+              {error}
             </Text>
+          )}
 
-            <Text
-              style={[
-                styles.subtitle,
-                { color: theme.colors.textMuted },
-              ]}
-            >
-              Crie sua conta para acessar o sistema
-            </Text>
-
-            <TextInput
-              placeholder="Nome completo"
-              value={name}
-              onChangeText={setName}
-              editable={!loading}
-              style={[
-                styles.input,
-                { borderColor: theme.colors.border, color: theme.colors.text },
-              ]}
-              placeholderTextColor={theme.colors.textMuted}
-            />
-
-            <TextInput
-              placeholder="Email"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              value={email}
-              onChangeText={setEmail}
-              editable={!loading}
-              returnKeyType="next"
-              style={[
-                styles.input,
-                { borderColor: theme.colors.border, color: theme.colors.text },
-              ]}
-              placeholderTextColor={theme.colors.textMuted}
-            />
-
-            <TextInput
-              placeholder="WhatsApp (DDD + número)"
-              keyboardType="phone-pad"
-              value={whatsapp}
-              onChangeText={(v) => setWhatsapp(formatWhatsapp(v))}
-              editable={!loading}
-              returnKeyType="next"
-              style={[
-                styles.input,
-                { borderColor: theme.colors.border, color: theme.colors.text },
-              ]}
-              placeholderTextColor={theme.colors.textMuted}
-            />
-
-            <TextInput
-              placeholder="Senha"
-              secureTextEntry
-              value={password}
-              onChangeText={setPassword}
-              editable={!loading}
-              returnKeyType="next"
-              style={[
-                styles.input,
-                { borderColor: theme.colors.border, color: theme.colors.text },
-              ]}
-              placeholderTextColor={theme.colors.textMuted}
-            />
-
-            <TextInput
-              placeholder="Repetir senha"
-              secureTextEntry
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              editable={!loading}
-              returnKeyType="done"
-              onSubmitEditing={handleRegister}
-              style={[
-                styles.input,
-                { borderColor: theme.colors.border, color: theme.colors.text },
-              ]}
-              placeholderTextColor={theme.colors.textMuted}
-            />
-
-            {error && (
+          <Pressable
+            onPress={handleRegister}
+            disabled={loading}
+            accessibilityLabel="Criar conta"
+            style={[
+              styles.button,
+              {
+                backgroundColor: theme.colors.primary,
+                opacity: loading ? 0.7 : 1,
+              },
+            ]}
+          >
+            {loading ? (
+              <ActivityIndicator color={theme.colors.primaryContrast} />
+            ) : (
               <Text
-                style={[styles.error, { color: theme.colors.danger }]}
+                style={{
+                  color: theme.colors.primaryContrast,
+                  fontWeight: "600",
+                }}
               >
-                {error}
+                Criar conta
               </Text>
             )}
-
-            <Pressable
-              onPress={handleRegister}
-              disabled={loading}
-              style={[
-                styles.button,
-                {
-                  backgroundColor: theme.colors.primary,
-                  opacity: loading ? 0.7 : 1,
-                },
-              ]}
-            >
-              {loading ? (
-                <ActivityIndicator
-                  color={theme.colors.primaryContrast}
-                />
-              ) : (
-                <Text
-                  style={{
-                    color: theme.colors.primaryContrast,
-                    fontWeight: "600",
-                  }}
-                >
-                  Criar conta
-                </Text>
-              )}
-            </Pressable>
-          </View>
-        </ScrollView>
+          </Pressable>
+        </View>
       </KeyboardAvoidingView>
     </AppScreen>
   );
@@ -283,10 +279,9 @@ export default function RegisterScreen() {
 ========================= */
 
 const styles = StyleSheet.create({
-  scroll: {
-    flexGrow: 1,
+  container: {
+    flex: 1,
     justifyContent: "center",
-    padding: 16,
   },
   card: {
     width: "100%",

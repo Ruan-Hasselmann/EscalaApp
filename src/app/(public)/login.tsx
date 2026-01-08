@@ -8,7 +8,6 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  ScrollView,
 } from "react-native";
 import { useRouter } from "expo-router";
 
@@ -29,7 +28,9 @@ export default function Login() {
   async function handleLogin() {
     if (loading) return;
 
-    if (!email || !password) {
+    const safeEmail = email.trim().toLowerCase();
+
+    if (!safeEmail || !password) {
       setError("Informe email e senha.");
       return;
     }
@@ -37,8 +38,8 @@ export default function Login() {
     try {
       setLoading(true);
       setError(null);
-      await login(email.trim(), password);
-      // redirect automático pelo guard (_layout)
+      await login(safeEmail, password);
+      // redirect automático pelo guard
     } catch {
       setError("Email ou senha inválidos.");
     } finally {
@@ -49,141 +50,139 @@ export default function Login() {
   return (
     <AppScreen>
       <KeyboardAvoidingView
-        style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
+        style={styles.container}
       >
-        <ScrollView
-          contentContainerStyle={styles.scroll}
-          keyboardShouldPersistTaps="handled"
-        >
-          <View style={styles.card}>
-            {/* HEADER */}
-            <Text style={[styles.title, { color: theme.colors.text }]}>
-              🔐 Entrar
-            </Text>
+        <View style={styles.card}>
+          <Text style={[styles.title, { color: theme.colors.text }]}>
+            🔐 Entrar
+          </Text>
 
+          <Text
+            style={[
+              styles.subtitle,
+              { color: theme.colors.textMuted },
+            ]}
+          >
+            Acesse sua conta para continuar
+          </Text>
+
+          <TextInput
+            value={email}
+            onChangeText={(v) => {
+              setEmail(v);
+              if (error) setError(null);
+            }}
+            placeholder="Email"
+            placeholderTextColor={theme.colors.textMuted}
+            autoCapitalize="none"
+            keyboardType="email-address"
+            textContentType="emailAddress"
+            editable={!loading}
+            returnKeyType="next"
+            style={[
+              styles.input,
+              {
+                color: theme.colors.text,
+                borderColor: theme.colors.border,
+              },
+            ]}
+          />
+
+          <TextInput
+            value={password}
+            onChangeText={(v) => {
+              setPassword(v);
+              if (error) setError(null);
+            }}
+            placeholder="Senha"
+            placeholderTextColor={theme.colors.textMuted}
+            secureTextEntry
+            textContentType="password"
+            editable={!loading}
+            returnKeyType="done"
+            onSubmitEditing={handleLogin}
+            style={[
+              styles.input,
+              {
+                color: theme.colors.text,
+                borderColor: theme.colors.border,
+              },
+            ]}
+          />
+
+          {error && (
             <Text
               style={[
-                styles.subtitle,
-                { color: theme.colors.textMuted },
+                styles.error,
+                { color: theme.colors.danger },
               ]}
             >
-              Acesse sua conta para continuar
+              {error}
             </Text>
+          )}
 
-            {/* EMAIL */}
-            <TextInput
-              value={email}
-              onChangeText={setEmail}
-              placeholder="Email"
-              placeholderTextColor={theme.colors.textMuted}
-              autoCapitalize="none"
-              keyboardType="email-address"
-              editable={!loading}
-              returnKeyType="next"
-              style={[
-                styles.input,
-                {
-                  color: theme.colors.text,
-                  borderColor: theme.colors.border,
-                },
-              ]}
-            />
-
-            {/* SENHA */}
-            <TextInput
-              value={password}
-              onChangeText={setPassword}
-              placeholder="Senha"
-              placeholderTextColor={theme.colors.textMuted}
-              secureTextEntry
-              editable={!loading}
-              returnKeyType="done"
-              onSubmitEditing={handleLogin} // ✅ ENTER faz login
-              style={[
-                styles.input,
-                {
-                  color: theme.colors.text,
-                  borderColor: theme.colors.border,
-                },
-              ]}
-            />
-
-            {/* ERRO */}
-            {error && (
+          <Pressable
+            onPress={handleLogin}
+            disabled={loading}
+            accessibilityLabel="Entrar"
+            style={[
+              styles.button,
+              {
+                backgroundColor: theme.colors.primary,
+                opacity: loading ? 0.7 : 1,
+              },
+            ]}
+          >
+            {loading ? (
+              <ActivityIndicator
+                color={theme.colors.primaryContrast}
+              />
+            ) : (
               <Text
-                style={[
-                  styles.error,
-                  { color: theme.colors.danger },
-                ]}
+                style={{
+                  color: theme.colors.primaryContrast,
+                  fontWeight:
+                    theme.typography.weights.semibold,
+                }}
               >
-                {error}
+                Entrar
               </Text>
             )}
+          </Pressable>
 
-            {/* LOGIN */}
+          <View style={styles.links}>
             <Pressable
-              onPress={handleLogin}
               disabled={loading}
-              style={[
-                styles.button,
-                {
-                  backgroundColor: theme.colors.primary,
-                  opacity: loading ? 0.7 : 1,
-                },
-              ]}
+              onPress={() => router.push("/register")}
             >
-              {loading ? (
-                <ActivityIndicator
-                  color={theme.colors.primaryContrast}
-                />
-              ) : (
-                <Text
-                  style={{
-                    color: theme.colors.primaryContrast,
-                    fontWeight:
-                      theme.typography.weights.semibold,
-                  }}
-                >
-                  Entrar
-                </Text>
-              )}
+              <Text
+                style={[
+                  styles.link,
+                  { color: theme.colors.primary },
+                ]}
+              >
+                Criar conta
+              </Text>
             </Pressable>
 
-            {/* LINKS */}
-            <View style={styles.links}>
-              <Pressable
-                disabled={loading}
-                onPress={() => router.push("/register")}
+            <Pressable
+              disabled={loading}
+              onPress={() =>
+                router.push("/forgot-password")
+              }
+            >
+              <Text
+                style={[
+                  styles.link,
+                  { color: theme.colors.textMuted },
+                ]}
               >
-                <Text
-                  style={[
-                    styles.link,
-                    { color: theme.colors.primary },
-                  ]}
-                >
-                  Criar conta
-                </Text>
-              </Pressable>
-
-              <Pressable
-                disabled={loading}
-                onPress={() =>
-                  router.push("/forgot-password")
-                }
-              >
-                <Text
-                  style={[
-                    styles.link,
-                    { color: theme.colors.textMuted },
-                  ]}
-                >
-                  Esqueci minha senha
-                </Text>
-              </Pressable>
-            </View>
+                Esqueci minha senha
+              </Text>
+            </Pressable>
           </View>
-        </ScrollView>
+        </View>
       </KeyboardAvoidingView>
     </AppScreen>
   );
@@ -194,10 +193,9 @@ export default function Login() {
 ========================= */
 
 const styles = StyleSheet.create({
-  scroll: {
-    flexGrow: 1,
+  container: {
+    flex: 1,
     justifyContent: "center",
-    padding: 16,
   },
   card: {
     width: "100%",

@@ -40,8 +40,10 @@ export default function AdminServiceDays() {
   const { theme } = useTheme();
 
   const today = new Date();
+
+  // 🔥 PADRÃO: month sempre JS (0–11)
   const [year, setYear] = useState(today.getFullYear());
-  const [month, setMonth] = useState(today.getMonth() + 1);
+  const [month, setMonth] = useState(today.getMonth());
 
   const [days, setDays] = useState<ServiceDay[]>([]);
   const [loading, setLoading] = useState(true);
@@ -57,10 +59,17 @@ export default function AdminServiceDays() {
 
   useEffect(() => {
     setLoading(true);
-    const unsub = listenServiceDaysByMonth(year, month, (items) => {
-      setDays(items);
-      setLoading(false);
-    });
+
+    // 🔥 service recebe month 1–12
+    const unsub = listenServiceDaysByMonth(
+      year,
+      month + 1,
+      (items) => {
+        setDays(items);
+        setLoading(false);
+      }
+    );
+
     return unsub;
   }, [year, month]);
 
@@ -121,7 +130,7 @@ export default function AdminServiceDays() {
 
   return (
     <AppScreen>
-      <AppHeader title="📅 Dias de Culto" back/>
+      <AppHeader title="📅 Dias de Culto" back />
 
       <View style={styles.calendarWrapper}>
         {/* MÊS */}
@@ -195,7 +204,8 @@ export default function AdminServiceDays() {
 
               let bg = theme.colors.surface;
               if (count === 1) bg = theme.colors.primary;
-              if (count > 1) bg = theme.colors.secondary ?? theme.colors.primary;
+              if (count > 1)
+                bg = theme.colors.secondary ?? theme.colors.primary;
 
               return (
                 <Pressable
@@ -204,7 +214,8 @@ export default function AdminServiceDays() {
                   style={[
                     styles.cell,
                     {
-                      backgroundColor: count > 0 ? bg : theme.colors.surface,
+                      backgroundColor:
+                        count > 0 ? bg : theme.colors.surface,
                       borderColor: isSelected
                         ? theme.colors.primary
                         : theme.colors.border,
@@ -248,12 +259,14 @@ export default function AdminServiceDays() {
           style={[styles.copyBtn, { borderColor: theme.colors.border }]}
         >
           <Text style={{ color: theme.colors.text, fontWeight: "500" }}>
-            {copying ? "Copiando..." : "📋 Copiar cultos do mês anterior"}
+            {copying
+              ? "Copiando..."
+              : "📋 Copiar cultos do mês anterior"}
           </Text>
         </Pressable>
       </View>
 
-      {/* MODAL DE DIA */}
+      {/* MODAL DIA */}
       <ServiceDayModal
         visible={!!selectedDate}
         date={selectedDate}
@@ -276,7 +289,11 @@ export default function AdminServiceDays() {
           setConfirmCopy(false);
           setCopying(true);
           try {
-            await copyServiceDaysFromPreviousMonthByOrder(year, month);
+            // 🔥 service recebe month 1–12
+            await copyServiceDaysFromPreviousMonthByOrder(
+              year,
+              month + 1
+            );
           } finally {
             setCopying(false);
           }

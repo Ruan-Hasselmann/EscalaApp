@@ -41,8 +41,11 @@ export default function AdminDashboard() {
           }
           title="Escala geral"
           description="Abrir tela de escalas publicadas"
-          onPress={() => router.push("/schedule/consolidate")}
+          onPress={() =>
+            router.push("/schedule/consolidate")
+          }
         />
+
         <ActionListItem
           icon={
             <Ionicons
@@ -57,6 +60,7 @@ export default function AdminDashboard() {
             router.push("/ministries/ministries")
           }
         />
+
         <ActionListItem
           icon={
             <Ionicons
@@ -71,6 +75,7 @@ export default function AdminDashboard() {
             router.push("/people")
           }
         />
+
         <ActionListItem
           icon={
             <Ionicons
@@ -81,8 +86,11 @@ export default function AdminDashboard() {
           }
           title="Cultos"
           description="Cadastrar cultos"
-          onPress={() => router.push("/service-days")}
+          onPress={() =>
+            router.push("/service-days")
+          }
         />
+
         <ActionListItem
           icon={
             <Ionicons
@@ -92,8 +100,10 @@ export default function AdminDashboard() {
             />
           }
           title="Disponibilidade"
-          description="Janela de Disponibilidade"
-          onPress={() => router.push("/availability")}
+          description="Janela de disponibilidade dos membros"
+          onPress={() =>
+            router.push("/availability")
+          }
         />
       </ActionList>
     </AppScreen>

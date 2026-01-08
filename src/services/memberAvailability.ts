@@ -6,13 +6,21 @@ import {
   query,
   setDoc,
   where,
+  serverTimestamp,
 } from "firebase/firestore";
 import { db } from "./firebase";
 import { getCurrentAvailabilityTarget } from "./availabilityWindow";
 
 /* =========================
-   TYPES
+   DOMAIN TYPES
 ========================= */
+
+/**
+ * REGRA DO SISTEMA:
+ * - Disponibilidade sempre pertence ao MÊS ALVO
+ * - month é DOMÍNIO 1–12
+ * - Limpar disponibilidade = remover documento
+ */
 
 export type MemberAvailabilityStatus = "available" | "unavailable";
 
@@ -22,9 +30,9 @@ export type MemberAvailability = {
   dateKey: string;     // YYYY-MM-DD (sempre do mês alvo)
   serviceId: string;
   year: number;
-  month: number;       // 0-11
+  month: number;       // 🔥 1–12 (DOMÍNIO)
   status: MemberAvailabilityStatus;
-  updatedAt: number;
+  updatedAt?: any;
 };
 
 /* =========================
@@ -57,12 +65,12 @@ export function listenMemberAvailabilityForTargetMonth(
   );
 
   return onSnapshot(q, (snap) => {
-    const items: MemberAvailability[] = snap.docs.map((d) => ({
-      id: d.id,
-      ...(d.data() as Omit<MemberAvailability, "id">),
-    }));
-
-    callback(items);
+    callback(
+      snap.docs.map((d) => ({
+        id: d.id,
+        ...(d.data() as Omit<MemberAvailability, "id">),
+      }))
+    );
   });
 }
 
@@ -93,7 +101,7 @@ async function setMemberAvailability(
       year,
       month,
       status,
-      updatedAt: Date.now(),
+      updatedAt: serverTimestamp(),
     },
     { merge: true }
   );

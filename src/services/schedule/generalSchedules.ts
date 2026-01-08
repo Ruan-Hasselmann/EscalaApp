@@ -2,15 +2,30 @@ import {
   addDoc,
   collection,
   doc,
-  documentId,
   getDocs,
   onSnapshot,
   query,
   serverTimestamp,
   updateDoc,
   where,
+  orderBy,
+  setDoc,
 } from "firebase/firestore";
 import { db } from "../firebase";
+
+/* =========================
+   HELPERS
+========================= */
+
+function assertMonth1to12(month: number) {
+  if (month < 1 || month > 12) {
+    throw new Error(`[schedules] month inválido: ${month} (esperado 1–12)`);
+  }
+}
+
+function generalScheduleId(year: number, month: number) {
+  return `${year}__${String(month).padStart(2, "0")}`;
+}
 
 /* =========================
    TYPES
@@ -31,19 +46,20 @@ export type Schedule = {
   serviceLabel: string;
   serviceDate: string; // YYYY-MM-DD
   year: number;
-  month: number; // 🔥 1–12 (DOMÍNIO)
+  month: number; // 1–12
   status: ScheduleStatus;
   assignments: ScheduleAssignment[];
-  generatedAt: number;
+  generatedAt: any;
   generatedBy: string;
+  publishedAt?: any;
 };
 
 export type GeneralSchedule = {
   id: string;
   year: number;
-  month: number; // 🔥 1–12 (DOMÍNIO)
+  month: number; // 1–12
   status: "published";
-  publishedAt: Date;
+  publishedAt: any;
 };
 
 /* =========================
@@ -55,18 +71,22 @@ export function listenSchedulesByMonth(
   month: number,
   callback: (items: Schedule[]) => void
 ) {
+  assertMonth1to12(month);
+
   const q = query(
     collection(db, "schedules"),
     where("year", "==", year),
-    where("month", "==", month)
+    where("month", "==", month),
+    orderBy("serviceDate", "asc")
   );
 
   return onSnapshot(q, (snap) => {
-    const items = snap.docs.map((d) => ({
-      id: d.id,
-      ...(d.data() as Omit<Schedule, "id">),
-    }));
-    callback(items);
+    callback(
+      snap.docs.map((d) => ({
+        id: d.id,
+        ...(d.data() as Omit<Schedule, "id">),
+      }))
+    );
   });
 }
 
@@ -77,7 +97,7 @@ export function listenSchedulesByMonth(
 export async function publishSchedule(scheduleId: string) {
   await updateDoc(doc(db, "schedules", scheduleId), {
     status: "published",
-    publishedAt: Date.now(),
+    publishedAt: serverTimestamp(),
   });
 }
 
@@ -88,22 +108,21 @@ export async function revertScheduleToDraft(scheduleId: string) {
 }
 
 /* =========================
-   QUERIES (🔥 USADA NA TELA)
+   QUERIES (TELAS)
 ========================= */
 
-/**
- * 🔥 Busca TODAS as escalas publicadas de um mês
- * @param month mês no formato de domínio (1–12)
- */
 export async function listPublishedSchedulesByMonth(
   year: number,
   month: number
 ): Promise<Schedule[]> {
+  assertMonth1to12(month);
+
   const q = query(
     collection(db, "schedules"),
     where("status", "==", "published"),
     where("year", "==", year),
-    where("month", "==", month)
+    where("month", "==", month),
+    orderBy("serviceDate", "asc")
   );
 
   const snap = await getDocs(q);
@@ -140,35 +159,36 @@ export async function getGeneralScheduleByMonth(
   year: number,
   month: number
 ): Promise<GeneralSchedule | null> {
-  const q = query(
-    collection(db, "generalSchedules"),
-    where("year", "==", year),
-    where("month", "==", month)
+  assertMonth1to12(month);
+
+  const ref = doc(db, "generalSchedules", generalScheduleId(year, month));
+  const snap = await getDocs(
+    query(
+      collection(db, "generalSchedules"),
+      where("year", "==", year),
+      where("month", "==", month)
+    )
   );
 
-  const snap = await getDocs(q);
   if (snap.empty) return null;
 
   const d = snap.docs[0];
-
-  return {
-    id: d.id,
-    ...(d.data() as Omit<GeneralSchedule, "id">),
-  };
+  return { id: d.id, ...(d.data() as Omit<GeneralSchedule, "id">) };
 }
 
 /* =========================
-   MUTATIONS
+   GENERAL SCHEDULE
 ========================= */
 
-/**
- * Publica a escala geral do mês
- */
 export async function publishGeneralSchedule(
   year: number,
   month: number
 ) {
-  await addDoc(collection(db, "generalSchedules"), {
+  assertMonth1to12(month);
+
+  const ref = doc(db, "generalSchedules", generalScheduleId(year, month));
+
+  await setDoc(ref, {
     year,
     month,
     status: "published",
@@ -176,31 +196,24 @@ export async function publishGeneralSchedule(
   });
 }
 
-/* =========================
-   LISTENER
-========================= */
-
 export function listenGeneralScheduleByMonth(
   year: number,
-  month: number, // 1–12
+  month: number,
   callback: (general: GeneralSchedule | null) => void
 ) {
-  const q = query(
-    collection(db, "generalSchedules"),
-    where("year", "==", year),
-    where("month", "==", month)
-  );
+  assertMonth1to12(month);
 
-  return onSnapshot(q, (snap) => {
-    if (snap.empty) {
+  const ref = doc(db, "generalSchedules", generalScheduleId(year, month));
+
+  return onSnapshot(ref, (snap) => {
+    if (!snap.exists()) {
       callback(null);
       return;
     }
 
-    const d = snap.docs[0];
     callback({
-      id: d.id,
-      ...(d.data() as Omit<GeneralSchedule, "id">),
+      id: snap.id,
+      ...(snap.data() as Omit<GeneralSchedule, "id">),
     });
   });
 }

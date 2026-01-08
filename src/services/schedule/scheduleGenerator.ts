@@ -1,11 +1,11 @@
 import {
   collection,
   doc,
-  documentId,
   getDocs,
   query,
   where,
   writeBatch,
+  serverTimestamp,
 } from "firebase/firestore";
 import { db } from "@/services/firebase";
 
@@ -31,54 +31,38 @@ export type ServiceTurn = {
 
 export type ServiceDay = {
   id: string;
-  dateKey: string; // YYYY-MM-DD
+  dateKey: string;
   year: number;
   month: number;
   day: number;
   services: ServiceTurn[];
-};
-
-export type MemberAvailabilityStatus = "available" | "unavailable" | "pending";
-
-export type MemberAvailability = {
-  id: string;
-  userId: string;
-  dateKey: string;
-  serviceId: string;
-  year: number;
-  month: number;
-  status: MemberAvailabilityStatus;
+  active: boolean;
 };
 
 export type ScheduleStatus = "draft" | "published";
 
-/* =========================
-   FLAGS
-========================= */
-
 export type ScheduleFlag =
   | {
-      type: "overload";
-      personId: string;
-      current: number;
-      limit: number;
+      type: "fixed_person_conflict";
+      userId: string;
+      conflictWithUserId: string;
+      dateKey: string;
+      serviceId: string;
+    }
+  | {
+      type: "same_service_conflict";
+      userId: string;
+      dateKey: string;
+      serviceId: string;
     }
   | {
       type: "same_day_multiple_services";
-      personId: string;
+      userId: string;
       dateKey: string;
-      serviceId: string;
-    }
-  | {
-      type: "fixed_person_conflict";
-      personId: string;
-      conflictWith: string;
-      dateKey: string;
-      serviceId: string;
     };
 
 export type GeneratedAssignment = {
-  personId: string;
+  userId: string;
   ministryId: string;
   source: "auto";
   flags: ScheduleFlag[];
@@ -96,7 +80,7 @@ export type ScheduleDoc = {
   status: ScheduleStatus;
   assignments: GeneratedAssignment[];
   flags: ScheduleFlag[];
-  generatedAt: number;
+  generatedAt: any;
   generatedBy: string;
 };
 
@@ -105,7 +89,6 @@ export type GenerateSchedulesInput = {
   ministryIds: string[];
   year: number;
   month: number;
-  overloadLimit?: number;
   overwriteDraft?: boolean;
 };
 
@@ -115,23 +98,23 @@ export type GenerateSchedulesResult = {
 };
 
 /* =========================
-   🔥 FIXED NAME CONFLICTS (SOBERANO)
-========================= */
-
-const FIXED_NAME_CONFLICTS: [string, string][] = [["ruan", "fabiano"]];
-
-function normalizeFirstName(name: string) {
-  return (name ?? "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .trim()
-    .toLowerCase()
-    .split(/\s+/)[0];
-}
-
-/* =========================
    HELPERS
 ========================= */
+
+const log = (msg: string) => console.log(`[AUTO-GEN] ${msg}`);
+
+function normalizeFirstName(name: string) {
+  return (name ?? "").trim().split(" ")[0].toLowerCase();
+}
+
+function isRuanFabianoConflict(a: string, b: string) {
+  const x = normalizeFirstName(a);
+  const y = normalizeFirstName(b);
+  return (
+    (x === "ruan" && y === "fabiano") ||
+    (x === "fabiano" && y === "ruan")
+  );
+}
 
 function scheduleDocId(ministryId: string, dateKey: string, serviceId: string) {
   return `${ministryId}__${dateKey}__${serviceId}`;
@@ -141,9 +124,11 @@ function serviceKey(dateKey: string, serviceId: string) {
   return `${dateKey}__${serviceId}`;
 }
 
-function chunk<T>(arr: T[], size: number) {
+function chunk<T>(arr: T[], size: number): T[][] {
   const out: T[][] = [];
-  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  for (let i = 0; i < arr.length; i += size) {
+    out.push(arr.slice(i, i + size));
+  }
   return out;
 }
 
@@ -151,61 +136,56 @@ function chunk<T>(arr: T[], size: number) {
    FIRESTORE READS
 ========================= */
 
+async function listUsersMap(): Promise<Record<string, { name: string }>> {
+  const snap = await getDocs(collection(db, "users"));
+  const map: Record<string, { name: string }> = {};
+  snap.docs.forEach((d) => {
+    map[d.id] = { name: (d.data() as any)?.name ?? "" };
+  });
+  return map;
+}
+
 async function listServiceDaysByMonth(year: number, month: number) {
-  const q = query(
-    collection(db, "serviceDays"),
-    where("year", "==", year),
-    where("month", "==", month)
+  const snap = await getDocs(
+    query(
+      collection(db, "serviceDays"),
+      where("year", "==", year),
+      where("month", "==", month),
+      where("active", "==", true)
+    )
   );
 
-  const snap = await getDocs(q);
-
-  return snap.docs
-    .map((d) => ({
-      id: d.id,
-      ...(d.data() as Omit<ServiceDay, "id">),
-    }))
-    .sort((a, b) => a.day - b.day);
+  return snap.docs.map((d) => ({
+    id: d.id,
+    ...(d.data() as Omit<ServiceDay, "id">),
+  }));
 }
 
 async function listMembershipsByMinistryIds(ministryIds: string[]) {
-  const q = query(
-    collection(db, "memberships"),
-    where("ministryId", "in", ministryIds),
-    where("active", "==", true)
-  );
-
-  const snap = await getDocs(q);
-
-  return snap.docs.map((d) => ({
-    id: d.id,
-    ...(d.data() as Omit<Membership, "id">),
-  }));
-}
-
-async function listMemberAvailabilityByMonth(year: number, month: number) {
-  const q = query(
-    collection(db, "memberAvailability"),
-    where("year", "==", year),
-    where("month", "==", month)
-  );
-
-  const snap = await getDocs(q);
-
-  return snap.docs.map((d) => ({
-    id: d.id,
-    ...(d.data() as Omit<MemberAvailability, "id">),
-  }));
+  const all: Membership[] = [];
+  for (const part of chunk(ministryIds, 10)) {
+    const snap = await getDocs(
+      query(
+        collection(db, "memberships"),
+        where("ministryId", "in", part),
+        where("active", "==", true)
+      )
+    );
+    snap.docs.forEach((d) =>
+      all.push({ id: d.id, ...(d.data() as Omit<Membership, "id">) })
+    );
+  }
+  return all;
 }
 
 async function listSchedulesByMonth(year: number, month: number) {
-  const q = query(
-    collection(db, "schedules"),
-    where("year", "==", year),
-    where("month", "==", month)
+  const snap = await getDocs(
+    query(
+      collection(db, "schedules"),
+      where("year", "==", year),
+      where("month", "==", month)
+    )
   );
-
-  const snap = await getDocs(q);
 
   return snap.docs.map((d) => ({
     id: d.id,
@@ -213,210 +193,137 @@ async function listSchedulesByMonth(year: number, month: number) {
   }));
 }
 
-async function listUserNamesByUids(uids: string[]) {
-  const unique = Array.from(new Set(uids)).filter(Boolean);
-  if (!unique.length) return {};
+async function deleteDraftSchedulesByMonth(
+  year: number,
+  month: number,
+  ministryIds: string[]
+) {
+  const snap = await getDocs(
+    query(
+      collection(db, "schedules"),
+      where("year", "==", year),
+      where("month", "==", month),
+      where("status", "==", "draft")
+    )
+  );
 
-  const map: Record<string, string> = {};
-  const parts = chunk(unique, 10);
+  const toDelete = snap.docs.filter((d) =>
+    ministryIds.includes((d.data() as any).ministryId)
+  );
 
-  for (const part of parts) {
-    const q = query(
-      collection(db, "users"),
-      where(documentId(), "in", part)
-    );
-
-    const snap = await getDocs(q);
-    snap.docs.forEach((d) => {
-      map[d.id] = String(d.data().name ?? "");
-    });
+  for (const part of chunk(toDelete, 450)) {
+    const batch = writeBatch(db);
+    part.forEach((d) => batch.delete(d.ref));
+    await batch.commit();
   }
-
-  return map;
 }
 
 /* =========================
-   CORE GENERATION
+   CORE
 ========================= */
 
 export async function generateAndSaveDraftSchedules(
   input: GenerateSchedulesInput
 ): Promise<GenerateSchedulesResult> {
-  const {
-    leaderUserId,
-    ministryIds,
-    year,
-    month,
-    overloadLimit = 4,
-    overwriteDraft = true,
-  } = input;
+  const { leaderUserId, ministryIds, year, month, overwriteDraft = true } = input;
 
-  if (!ministryIds.length) {
-    return { schedules: [], flags: [] };
+  if (!ministryIds.length) return { schedules: [], flags: [] };
+
+  if (overwriteDraft) {
+    await deleteDraftSchedulesByMonth(year, month, ministryIds);
   }
 
-  const [serviceDays, memberships, availability, existingSchedules] =
-    await Promise.all([
-      listServiceDaysByMonth(year, month),
-      listMembershipsByMinistryIds(ministryIds),
-      listMemberAvailabilityByMonth(year, month),
-      listSchedulesByMonth(year, month),
-    ]);
+  const [
+    serviceDays,
+    memberships,
+    usersMap,
+    existingSchedules,
+  ] = await Promise.all([
+    listServiceDaysByMonth(year, month),
+    listMembershipsByMinistryIds(ministryIds),
+    listUsersMap(),
+    listSchedulesByMonth(year, month),
+  ]);
 
-  /* =========================
-     USER NAMES
-  ========================= */
+  /** 🔥 ESTADO GLOBAL DO MÊS */
+  const assignedByService = new Map<string, Set<string>>();
+  const assignedByDay = new Map<string, Set<string>>();
+  const loadByUser = new Map<string, number>();
 
-  const userNameMap = await listUserNamesByUids(
-    memberships.map((m) => m.userId)
-  );
+  for (const s of existingSchedules) {
+    for (const a of s.assignments) {
+      const sk = serviceKey(s.serviceDate, s.serviceId);
 
-  /* =========================
-     AVAILABILITY MAP
-  ========================= */
+      assignedByService.set(
+        sk,
+        (assignedByService.get(sk) ?? new Set()).add(a.userId)
+      );
 
-  const availabilityMap: Record<string, MemberAvailabilityStatus> = {};
-  availability.forEach((a) => {
-    availabilityMap[`${a.dateKey}__${a.serviceId}__${a.userId}`] = a.status;
-  });
+      assignedByDay.set(
+        s.serviceDate,
+        (assignedByDay.get(s.serviceDate) ?? new Set()).add(a.userId)
+      );
 
-  /* =========================
-     LOAD & EXISTING ASSIGNMENTS
-  ========================= */
-
-  const loadByPerson: Record<string, number> = {};
-  const assignedByService: Record<string, string[]> = {};
-  const assignedByDay: Record<string, string[]> = {};
-
-  existingSchedules.forEach((s) => {
-    s.assignments.forEach((a) => {
-      loadByPerson[a.personId] = (loadByPerson[a.personId] ?? 0) + 1;
-
-      const sKey = serviceKey(s.serviceDate, s.serviceId);
-      assignedByService[sKey] ??= [];
-      assignedByService[sKey].push(a.personId);
-
-      assignedByDay[s.serviceDate] ??= [];
-      assignedByDay[s.serviceDate].push(a.personId);
-    });
-  });
-
-  const membershipsByMinistry: Record<string, Membership[]> = {};
-  memberships.forEach((m) => {
-    membershipsByMinistry[m.ministryId] ??= [];
-    membershipsByMinistry[m.ministryId].push(m);
-  });
-
-  /* =========================
-     GENERATION
-  ========================= */
+      loadByUser.set(a.userId, (loadByUser.get(a.userId) ?? 0) + 1);
+    }
+  }
 
   const generated: ScheduleDoc[] = [];
-  const allFlags: ScheduleFlag[] = [];
 
-  const assignedThisRunByService: Record<string, string[]> = {};
-  const assignedThisRunByDay: Record<string, string[]> = {};
+  /** 🔥 ORDEM CORRETA: DIA → CULTO → MINISTÉRIO */
+  for (const day of serviceDays) {
+    for (const service of day.services) {
+      const sk = serviceKey(day.dateKey, service.id);
+      const dayKey = day.dateKey;
 
-  for (const ministryId of ministryIds) {
-    const members = membershipsByMinistry[ministryId] ?? [];
+      assignedByService.set(sk, assignedByService.get(sk) ?? new Set());
 
-    for (const day of serviceDays) {
-      for (const service of day.services ?? []) {
-        const docId = scheduleDocId(ministryId, day.dateKey, service.id);
-        const existing = existingSchedules.find((s) => s.id === docId);
-
-        if (existing?.status === "published") continue;
-        if (existing?.status === "draft" && !overwriteDraft) continue;
-
-        const sKey = serviceKey(day.dateKey, service.id);
+      for (const ministryId of ministryIds) {
+        const members = memberships.filter(
+          (m) => m.ministryId === ministryId && m.active
+        );
 
         const candidates = members
           .map((m) => m.userId)
           .filter((userId) => {
-            const myName = normalizeFirstName(userNameMap[userId] ?? "");
-            if (!myName) return false;
+            const inService = assignedByService.get(sk)!;
+            const inDay = assignedByDay.get(dayKey) ?? new Set();
 
-            // 🔥 Regra soberana: Ruan x Fabiano
-            const assignedNames =
-              [...(assignedByService[sKey] ?? []), ...(assignedThisRunByService[sKey] ?? [])]
-                .map((id) => normalizeFirstName(userNameMap[id] ?? ""));
-
-            if (
-              FIXED_NAME_CONFLICTS.some(
-                ([a, b]) =>
-                  (myName === a && assignedNames.includes(b)) ||
-                  (myName === b && assignedNames.includes(a))
-              )
-            ) {
-              allFlags.push({
-                type: "fixed_person_conflict",
-                personId: userId,
-                conflictWith: myName === "ruan" ? "fabiano" : "ruan",
-                dateKey: day.dateKey,
-                serviceId: service.id,
-              });
-              return false;
+            for (const otherId of inService) {
+              if (
+                isRuanFabianoConflict(
+                  usersMap[userId]?.name,
+                  usersMap[otherId]?.name
+                )
+              ) {
+                return false;
+              }
             }
 
-            // 🔒 Disponibilidade: SOMENTE available
-            const status =
-              availabilityMap[`${day.dateKey}__${service.id}__${userId}`];
-            if (status !== "available") return false;
+            if (inService.has(userId)) return false;
+            if (inDay.has(userId)) return false;
 
             return true;
-          });
+          })
+          .sort(
+            (a, b) =>
+              (loadByUser.get(a) ?? 0) - (loadByUser.get(b) ?? 0)
+          );
 
-        if (!candidates.length) continue;
+        const chosen = candidates[0];
+        if (!chosen) continue;
 
-        const chosen = [...candidates].sort(
-          (a, b) =>
-            (loadByPerson[a] ?? 0) - (loadByPerson[b] ?? 0) ||
-            a.localeCompare(b)
-        )[0];
-
-        const flags: ScheduleFlag[] = [];
-
-        // ⚠️ Sobrecarga mensal
-        const currentLoad = loadByPerson[chosen] ?? 0;
-        if (currentLoad >= overloadLimit) {
-          const f: ScheduleFlag = {
-            type: "overload",
-            personId: chosen,
-            current: currentLoad,
-            limit: overloadLimit,
-          };
-          flags.push(f);
-          allFlags.push(f);
-        }
-
-        // ⚠️ Mesmo dia, outro culto
-        const sameDay =
-          assignedByDay[day.dateKey]?.includes(chosen) ||
-          assignedThisRunByDay[day.dateKey]?.includes(chosen);
-
-        if (sameDay) {
-          const f: ScheduleFlag = {
-            type: "same_day_multiple_services",
-            personId: chosen,
-            dateKey: day.dateKey,
-            serviceId: service.id,
-          };
-          flags.push(f);
-          allFlags.push(f);
-        }
-
-        loadByPerson[chosen] = currentLoad + 1;
-
-        assignedThisRunByService[sKey] ??= [];
-        assignedThisRunByService[sKey].push(chosen);
-
-        assignedThisRunByDay[day.dateKey] ??= [];
-        assignedThisRunByDay[day.dateKey].push(chosen);
+        assignedByService.get(sk)!.add(chosen);
+        assignedByDay.set(
+          dayKey,
+          (assignedByDay.get(dayKey) ?? new Set()).add(chosen)
+        );
+        loadByUser.set(chosen, (loadByUser.get(chosen) ?? 0) + 1);
 
         generated.push({
-          id: docId,
+          id: scheduleDocId(ministryId, day.dateKey, service.id),
           ministryId,
-          serviceDayId: day.dateKey,
+          serviceDayId: day.id,
           serviceId: service.id,
           serviceDate: day.dateKey,
           serviceLabel: service.label,
@@ -425,30 +332,27 @@ export async function generateAndSaveDraftSchedules(
           status: "draft",
           assignments: [
             {
-              personId: chosen,
+              userId: chosen,
               ministryId,
               source: "auto",
-              flags,
+              flags: [],
             },
           ],
-          flags,
-          generatedAt: Date.now(),
+          flags: [],
+          generatedAt: serverTimestamp(),
           generatedBy: leaderUserId,
         });
       }
     }
   }
 
-  /* =========================
-     SAVE
-  ========================= */
+  for (const part of chunk(generated, 400)) {
+    const batch = writeBatch(db);
+    part.forEach((s) => batch.set(doc(db, "schedules", s.id), s));
+    await batch.commit();
+  }
 
-  const batch = writeBatch(db);
-  generated.forEach((s) => {
-    batch.set(doc(db, "schedules", s.id), s);
-  });
+  log(`Generated schedules: ${generated.length}`);
 
-  await batch.commit();
-
-  return { schedules: generated, flags: allFlags };
+  return { schedules: generated, flags: [] };
 }
