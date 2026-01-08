@@ -77,7 +77,7 @@ export function AppHeader({ title, back }: Props) {
             onPress={() => router.replace("/")}
             accessibilityRole="button"
           >
-            <Text style={{ color: theme.colors.text, fontSize: 18 }}>
+            <Text style={{ color: theme.colors.text, fontSize: 22 }}>
               ◀
             </Text>
           </Pressable>

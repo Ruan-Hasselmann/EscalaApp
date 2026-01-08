@@ -69,7 +69,7 @@ export default function AdminLayout() {
           title: "Cultos",
           tabBarIcon: ({ color, size }) => (
             <Ionicons
-              name="ribbon-outline"
+              name="calendar-outline"
               size={size}
               color={color}
             />

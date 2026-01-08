@@ -50,6 +50,16 @@ function formatDatePtBr(date: Date) {
   });
 }
 
+function buildServiceId(
+  dateKey: string,
+  type: ServiceTurnType,
+  label: string
+) {
+  return `${dateKey}__${type}__${label
+    .toLowerCase()
+    .replace(/\s+/g, "_")}`;
+}
+
 /* =========================
    COMPONENT
 ========================= */
@@ -89,7 +99,7 @@ export function ServiceDayModal({
 
   const dateKey = toDateKey(date);
   const year = date.getFullYear();
-  const month = date.getMonth() + 1; // ✅ CORREÇÃO: 1–12
+  const month = date.getMonth() + 1;
   const day = date.getDate();
 
   /* =========================
@@ -103,12 +113,14 @@ export function ServiceDayModal({
     try {
       setBusy(true);
 
+      const finalLabel =
+        type === "special"
+          ? label.trim()
+          : `Culto ${turn}`;
+
       const service: ServiceTurn = {
-        id: crypto.randomUUID(), // ✅ ID seguro
-        label:
-          type === "special"
-            ? label.trim()
-            : `Culto ${turn}`,
+        id: buildServiceId(dateKey, type, finalLabel),
+        label: finalLabel,
         type,
       };
 
@@ -163,7 +175,6 @@ export function ServiceDayModal({
             { backgroundColor: theme.colors.surface },
           ]}
         >
-          {/* HEADER */}
           <Text
             style={[
               styles.title,
@@ -174,7 +185,7 @@ export function ServiceDayModal({
           </Text>
 
           {/* TURNO */}
-          <Text style={{ color: theme.colors.textMuted, marginTop: 12 }}>
+          <Text style={{ color: theme.colors.textMuted }}>
             Turno
           </Text>
 
@@ -208,7 +219,12 @@ export function ServiceDayModal({
           </View>
 
           {/* TIPO */}
-          <Text style={{ color: theme.colors.textMuted, marginTop: 12 }}>
+          <Text
+            style={{
+              color: theme.colors.textMuted,
+              marginTop: 12,
+            }}
+          >
             Tipo de culto
           </Text>
 
@@ -245,7 +261,6 @@ export function ServiceDayModal({
             )}
           </View>
 
-          {/* LABEL ESPECIAL */}
           {type === "special" && (
             <TextInput
               placeholder="Nome do culto especial"
@@ -262,7 +277,6 @@ export function ServiceDayModal({
             />
           )}
 
-          {/* ADD */}
           <Pressable
             onPress={addService}
             disabled={
@@ -275,7 +289,7 @@ export function ServiceDayModal({
                 backgroundColor: theme.colors.primary,
                 opacity:
                   busy ||
-                  (type === "special" && !label.trim())
+                    (type === "special" && !label.trim())
                     ? 0.6
                     : 1,
               },
@@ -351,7 +365,6 @@ export function ServiceDayModal({
             </Text>
           )}
 
-          {/* REMOVER DIA */}
           {dayData && (
             <Pressable
               onPress={() => setConfirmRemoveDay(true)}
@@ -374,7 +387,6 @@ export function ServiceDayModal({
             </Pressable>
           )}
 
-          {/* FECHAR */}
           <Pressable
             onPress={onClose}
             style={[
@@ -390,7 +402,6 @@ export function ServiceDayModal({
             </Text>
           </Pressable>
 
-          {/* CONFIRMAÇÕES */}
           {confirmRemoveService && (
             <Pressable
               onPress={() =>

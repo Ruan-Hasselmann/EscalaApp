@@ -331,7 +331,7 @@ export default function AdminPublishedSchedulesScreen() {
         </Pressable>
 
         <Text style={styles.monthTitle}>
-          {monthLabel(year, month + 1)}
+          {monthLabel(year, month)}
         </Text>
 
         <Pressable onPress={() => goTo(1)} style={styles.navBtn}>

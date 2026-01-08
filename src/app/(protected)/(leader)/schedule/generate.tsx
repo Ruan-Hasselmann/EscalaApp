@@ -377,6 +377,7 @@ export default function LeaderGenerateSchedule() {
                     flex: 1,
                     color: theme.colors.text,
                     fontWeight: "600",
+                    textTransform: "capitalize"
                   }}
                 >
                   {formatServiceDate(ref.serviceDate)} • {ref.serviceLabel}

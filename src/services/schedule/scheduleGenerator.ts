@@ -43,23 +43,23 @@ export type ScheduleStatus = "draft" | "published";
 
 export type ScheduleFlag =
   | {
-      type: "fixed_person_conflict";
-      userId: string;
-      conflictWithUserId: string;
-      dateKey: string;
-      serviceId: string;
-    }
+    type: "fixed_person_conflict";
+    userId: string;
+    conflictWithUserId: string;
+    dateKey: string;
+    serviceId: string;
+  }
   | {
-      type: "same_service_conflict";
-      userId: string;
-      dateKey: string;
-      serviceId: string;
-    }
+    type: "same_service_conflict";
+    userId: string;
+    dateKey: string;
+    serviceId: string;
+  }
   | {
-      type: "same_day_multiple_services";
-      userId: string;
-      dateKey: string;
-    };
+    type: "same_day_multiple_services";
+    userId: string;
+    dateKey: string;
+  };
 
 export type GeneratedAssignment = {
   userId: string;
@@ -100,8 +100,6 @@ export type GenerateSchedulesResult = {
 /* =========================
    HELPERS
 ========================= */
-
-const log = (msg: string) => console.log(`[AUTO-GEN] ${msg}`);
 
 function normalizeFirstName(name: string) {
   return (name ?? "").trim().split(" ")[0].toLowerCase();
@@ -351,8 +349,6 @@ export async function generateAndSaveDraftSchedules(
     part.forEach((s) => batch.set(doc(db, "schedules", s.id), s));
     await batch.commit();
   }
-
-  log(`Generated schedules: ${generated.length}`);
 
   return { schedules: generated, flags: [] };
 }
