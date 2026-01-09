@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import {
   Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -17,6 +18,7 @@ import {
   removeServiceFromDay,
   deleteServiceDay,
 } from "@/services/serviceDays";
+import { listMinistries, Ministry } from "@/services/ministries";
 
 /* =========================
    TYPES
@@ -83,6 +85,8 @@ export function ServiceDayModal({
     useState(false);
   const [confirmRemoveService, setConfirmRemoveService] =
     useState<string | null>(null);
+  const [ministries, setMinistries] = useState<Ministry[]>([]);
+  const [expandedServiceId, setExpandedServiceId] = useState<string | null>(null);
 
   useEffect(() => {
     if (visible) {
@@ -95,6 +99,15 @@ export function ServiceDayModal({
     }
   }, [visible]);
 
+  useEffect(() => {
+    async function load() {
+      const items = await listMinistries();
+      setMinistries(items);
+    }
+
+    if (visible) load();
+  }, [visible]);
+
   if (!date) return null;
 
   const dateKey = toDateKey(date);
@@ -105,6 +118,31 @@ export function ServiceDayModal({
   /* =========================
      ACTIONS
   ========================= */
+
+  async function updateSlot(
+    service: ServiceTurn,
+    ministryId: string,
+    delta: number
+  ) {
+    const current = service.ministrySlots?.[ministryId] ?? 1;
+    const next = Math.max(0, Math.min(4, current + delta));
+
+    const updated: ServiceTurn = {
+      ...service,
+      ministrySlots: {
+        ...(service.ministrySlots ?? {}),
+        [ministryId]: next,
+      },
+    };
+
+    return upsertServiceDay({
+      dateKey,
+      year,
+      month,
+      day,
+      service: updated,
+    });
+  }
 
   async function addService() {
     if (busy) return;
@@ -160,6 +198,10 @@ export function ServiceDayModal({
     } finally {
       setBusy(false);
     }
+  }
+
+  function toggleExpand(serviceId: string) {
+    setExpandedServiceId((prev) => (prev === serviceId ? null : serviceId));
   }
 
   /* =========================
@@ -307,53 +349,138 @@ export function ServiceDayModal({
 
           {/* LISTA */}
           {dayData?.services?.length ? (
-            <View style={styles.list}>
-              {dayData.services.map((s) => (
-                <View
-                  key={s.id}
-                  style={[
-                    styles.serviceRow,
-                    { borderColor: theme.colors.border },
-                  ]}
-                >
-                  <View>
-                    <Text
-                      style={{
-                        color: theme.colors.text,
-                        fontWeight: "600",
-                      }}
-                    >
-                      {s.label}
-                    </Text>
-                    <Text
-                      style={{
-                        fontSize: 12,
-                        color: theme.colors.textMuted,
-                      }}
-                    >
-                      {s.type === "special"
-                        ? "Culto especial"
-                        : "Culto regular"}
-                    </Text>
-                  </View>
-
-                  <Pressable
-                    onPress={() =>
-                      setConfirmRemoveService(s.id)
-                    }
+            <ScrollView
+              style={{ maxHeight: 420 }}
+              contentContainerStyle={{ paddingBottom: 20 }}
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.list}>
+                {dayData.services.map((s) => (
+                  <View
+                    key={s.id}
+                    style={[
+                      styles.serviceRow,
+                      { borderColor: theme.colors.border },
+                    ]}
                   >
-                    <Text
-                      style={{
-                        color: theme.colors.danger,
-                        fontSize: 16,
-                      }}
-                    >
-                      🗑
-                    </Text>
-                  </Pressable>
-                </View>
-              ))}
-            </View>
+                    <View style={{ flex: 1 }}>
+                      {/* HEADER */}
+                      <Pressable
+                        onPress={() => toggleExpand(s.id)}
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                        }}
+                      >
+                        <View style={{ flex: 1 }}>
+                          <Text
+                            style={{
+                              color: theme.colors.text,
+                              fontWeight: "600",
+                            }}
+                          >
+                            {s.label}
+                          </Text>
+
+                          <Text
+                            style={{
+                              fontSize: 12,
+                              color: theme.colors.textMuted,
+                              marginTop: 2,
+                            }}
+                          >
+                            {s.type === "special" ? "Culto especial" : "Culto regular"}
+                          </Text>
+                        </View>
+
+                        {/* AÇÕES */}
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+                          <Text style={{ color: theme.colors.textMuted }}>
+                            {expandedServiceId === s.id ? "▲" : "▼"}
+                          </Text>
+
+                          <Pressable onPress={() => setConfirmRemoveService(s.id)}>
+                            <Text style={{ color: theme.colors.danger, fontSize: 18 }}>🗑</Text>
+                          </Pressable>
+                        </View>
+                      </Pressable>
+
+                      {/* 🔽 EXPANDIDO */}
+                      {expandedServiceId === s.id && (
+                        <View style={{ marginTop: 12, gap: 8 }}>
+                          {ministries.map((m) => {
+                            const value = s.ministrySlots?.[m.id] ?? 1;
+                            const canDecrease = value > 0;
+                            const canIncrease = value < 4;
+
+                            return (
+                              <View
+                                key={m.id}
+                                style={{
+                                  flexDirection: "row",
+                                  justifyContent: "space-between",
+                                  alignItems: "center",
+                                }}
+                              >
+                                <Text
+                                  style={{
+                                    fontSize: 13,
+                                    color: theme.colors.textMuted,
+                                  }}
+                                >
+                                  {m.name}
+                                </Text>
+
+                                <View
+                                  style={{
+                                    flexDirection: "row",
+                                    alignItems: "center",
+                                    gap: 10,
+                                  }}
+                                >
+                                  <Pressable
+                                    disabled={!canDecrease || busy}
+                                    onPress={() => updateSlot(s, m.id, -1)}
+                                    style={[
+                                      styles.slotBtn,
+                                      {
+                                        opacity: !canDecrease || busy ? 0.4 : 1,
+                                        borderColor: theme.colors.border,
+                                        backgroundColor: theme.colors.background,
+                                      },
+                                    ]}
+                                  >
+                                    <Text style={{ color: theme.colors.text }}>−</Text>
+                                  </Pressable>
+
+                                  <Text style={{ color: theme.colors.text }}>{value}</Text>
+
+                                  <Pressable
+                                    disabled={!canIncrease || busy}
+                                    onPress={() => updateSlot(s, m.id, +1)}
+                                    style={[
+                                      styles.slotBtn,
+                                      {
+                                        opacity: !canIncrease || busy ? 0.4 : 1,
+                                        borderColor: theme.colors.border,
+                                        backgroundColor: theme.colors.background,
+                                      },
+                                    ]}
+                                  >
+                                    <Text style={{ color: theme.colors.text }}>+</Text>
+                                  </Pressable>
+                                </View>
+                              </View>
+                            );
+                          })}
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                ))}
+              </View>
+            </ScrollView>
           ) : (
             <Text
               style={{
@@ -442,8 +569,8 @@ export function ServiceDayModal({
             </Pressable>
           )}
         </View>
-      </View>
-    </Modal>
+      </View >
+    </Modal >
   );
 }
 
@@ -508,5 +635,13 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 10,
     alignItems: "center",
+  },
+  slotBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

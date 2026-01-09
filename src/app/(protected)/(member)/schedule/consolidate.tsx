@@ -187,6 +187,28 @@ export default function PublishedScheduleScreen() {
     setMonth(d.getMonth() + 1);
   }
 
+  function groupAssignmentsByMinistry(items: Schedule[]) {
+    const map: Record<
+      string,
+      { ministryId: string; userIds: string[] }
+    > = {};
+
+    items.forEach((s) => {
+      if (!map[s.ministryId]) {
+        map[s.ministryId] = {
+          ministryId: s.ministryId,
+          userIds: [],
+        };
+      }
+
+      s.assignments.forEach((a) => {
+        map[s.ministryId].userIds.push(a.userId);
+      });
+    });
+
+    return Object.values(map);
+  }
+
   const styles = useMemo(
     () =>
       StyleSheet.create({
@@ -286,23 +308,22 @@ export default function PublishedScheduleScreen() {
                 {ref.serviceLabel} • {formatDatePtBr(ref.serviceDate)}
               </Text>
 
-              {items
-                .slice() // evita mutação
+              {groupAssignmentsByMinistry(items)
                 .sort((a, b) =>
                   (ministries[a.ministryId] ?? "").localeCompare(
                     ministries[b.ministryId] ?? "",
                     "pt-BR"
                   )
                 )
-                .map((s) => (
-                  <View key={s.id}>
+                .map((group) => (
+                  <View key={group.ministryId}>
                     <Text style={styles.ministry}>
-                      {ministries[s.ministryId]}
+                      {ministries[group.ministryId]}
                     </Text>
 
-                    {s.assignments.map((a) => (
-                      <Text key={a.userId} style={styles.person}>
-                        • {firstName(peopleNames[a.userId])}
+                    {group.userIds.map((userId) => (
+                      <Text key={userId} style={styles.person}>
+                        • {firstName(peopleNames[userId])}
                       </Text>
                     ))}
                   </View>

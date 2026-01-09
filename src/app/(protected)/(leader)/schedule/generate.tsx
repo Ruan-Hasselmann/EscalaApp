@@ -267,6 +267,35 @@ export default function LeaderGenerateSchedule() {
     }
   }
 
+  function groupAssignmentsByMinistry(items: Schedule[]) {
+    const map: Record<
+      string,
+      { ministryId: string; userIds: string[] }
+    > = {};
+
+    items.forEach((s) => {
+      if (!map[s.ministryId]) {
+        map[s.ministryId] = {
+          ministryId: s.ministryId,
+          userIds: [],
+        };
+      }
+
+      s.assignments.forEach((a) => {
+        map[s.ministryId].userIds.push(a.userId);
+      });
+    });
+
+    return Object.values(map).sort((a, b) => {
+      const nameA =
+        ministryMap[a.ministryId]?.name?.toLowerCase() ?? "";
+      const nameB =
+        ministryMap[b.ministryId]?.name?.toLowerCase() ?? "";
+
+      return nameA.localeCompare(nameB, "pt-BR");
+    });
+  }
+
   /* =========================
      RENDER
   ========================= */
@@ -407,39 +436,49 @@ export default function LeaderGenerateSchedule() {
                 </Pressable>
               </View>
 
-              {items.map((s) => (
-                <View key={s.id} style={styles.assignmentRow}>
+              {groupAssignmentsByMinistry(items).map((group) => (
+                <View key={group.ministryId} style={styles.assignmentRow}>
                   <View style={{ flex: 1 }}>
                     <Text style={{ color: theme.colors.textMuted }}>
-                      {ministryMap[s.ministryId]?.name}
+                      {ministryMap[group.ministryId]?.name}
                     </Text>
 
-                    {s.assignments.map((a) => (
-                      <Text
-                        key={a.userId}
-                        style={{ color: theme.colors.text }}
-                      >
-                        • {firstName(userMap[a.userId]?.name)}
-                      </Text>
-                    ))}
-                  </View>
-
-                  <Pressable
-                    onPress={() => {
-                      setEditSchedule(s);
-                      setSelectedPersonId(
-                        s.assignments[0]?.userId ?? null
+                    {group.userIds.map((userId) => {
+                      const slotSchedule = items.find(
+                        (s) =>
+                          s.ministryId === group.ministryId &&
+                          s.assignments.some((a) => a.userId === userId)
                       );
-                    }}
-                    style={[
-                      styles.editBtn,
-                      { borderColor: theme.colors.border },
-                    ]}
-                  >
-                    <Text style={{ color: theme.colors.text }}>
-                      Editar
-                    </Text>
-                  </Pressable>
+
+                      if (!slotSchedule) return null;
+
+                      return (
+                        <View
+                          key={userId}
+                          style={styles.assignmentRow}
+                        >
+                          <Text style={{ color: theme.colors.text }}>
+                            • {firstName(userMap[userId]?.name)}
+                          </Text>
+
+                          <Pressable
+                            onPress={() => {
+                              setEditSchedule(slotSchedule);
+                              setSelectedPersonId(userId);
+                            }}
+                            style={[
+                              styles.editBtn,
+                              { borderColor: theme.colors.border },
+                            ]}
+                          >
+                            <Text style={{ color: theme.colors.text }}>
+                              Editar
+                            </Text>
+                          </Pressable>
+                        </View>
+                      );
+                    })}
+                  </View>
                 </View>
               ))}
             </View>
@@ -557,14 +596,17 @@ const styles = StyleSheet.create({
   assignmentRow: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
     gap: 12,
     marginTop: 6,
   },
   editBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     borderRadius: 10,
     borderWidth: 1,
+    minWidth: 72,
+    alignItems: "center",
   },
   selectWrapper: {
     gap: 6,
