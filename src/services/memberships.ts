@@ -62,6 +62,7 @@ export function listenMemberships(
 ) {
   const q = query(
     collection(db, "memberships"),
+    where("active", "==", true),
     orderBy("createdAt", "asc")
   );
 

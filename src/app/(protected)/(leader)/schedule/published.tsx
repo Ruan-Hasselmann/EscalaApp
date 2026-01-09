@@ -27,6 +27,7 @@ import {
 } from "@/services/schedule/schedules";
 
 import { listenUsers, AppUser } from "@/services/users";
+import { listenGeneralScheduleByMonth } from "@/services/schedule/generalSchedules";
 
 /* =========================
    HELPERS
@@ -43,6 +44,31 @@ function formatDatePtBr(dateKey: string) {
     day: "2-digit",
     month: "long",
   });
+}
+
+function groupAssignmentsByMinistry(items: Schedule[]) {
+  const map: Record<
+    string,
+    {
+      ministryId: string;
+      userIds: string[];
+    }
+  > = {};
+
+  items.forEach((s) => {
+    if (!map[s.ministryId]) {
+      map[s.ministryId] = {
+        ministryId: s.ministryId,
+        userIds: [],
+      };
+    }
+
+    s.assignments.forEach((a) => {
+      map[s.ministryId].userIds.push(a.userId);
+    });
+  });
+
+  return Object.values(map);
 }
 
 /**
@@ -79,6 +105,7 @@ export default function LeaderPublishedSchedules() {
   const [memberships, setMemberships] = useState<Membership[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [users, setUsers] = useState<AppUser[]>([]);
+  const [generalPublished, setGeneralPublished] = useState(false);
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmTarget, setConfirmTarget] =
@@ -112,6 +139,19 @@ export default function LeaderPublishedSchedules() {
       unsubUsers();
     };
   }, [profile?.uid, year, month]);
+
+  useEffect(() => {
+    if (!profile) return;
+
+    return listenGeneralScheduleByMonth(
+      year,
+      month,
+      (general) => {
+        setGeneralPublished(!!general);
+      }
+    );
+  }, [profile, year, month]);
+
 
   /* =========================
      MAPS
@@ -193,11 +233,19 @@ export default function LeaderPublishedSchedules() {
       <ScrollView style={styles.wrapper}>
         {published.length > 0 && (
           <Pressable
+            disabled={generalPublished}
             style={[
               styles.monthBtn,
-              { borderColor: theme.colors.danger },
+              {
+                borderColor: generalPublished
+                  ? theme.colors.border
+                  : theme.colors.danger,
+                opacity: generalPublished ? 0.5 : 1,
+              },
             ]}
             onPress={() => {
+              if (generalPublished) return;
+
               setConfirmTarget({
                 type: "month",
                 items: published,
@@ -207,11 +255,15 @@ export default function LeaderPublishedSchedules() {
           >
             <Text
               style={{
-                color: theme.colors.danger,
+                color: generalPublished
+                  ? theme.colors.textMuted
+                  : theme.colors.danger,
                 fontWeight: "700",
               }}
             >
-              🔄 Voltar TODAS para rascunho
+              {generalPublished
+                ? "🔒 Escala geral publicada"
+                : "🔄 Voltar TODAS para rascunho"}
             </Text>
           </Pressable>
         )}
@@ -257,16 +309,15 @@ export default function LeaderPublishedSchedules() {
                 {formatDatePtBr(ref.serviceDate)}
               </Text>
 
-              {items
-                .slice()
+              {groupAssignmentsByMinistry(items)
                 .sort((a, b) =>
                   (ministryMap[a.ministryId]?.name ?? "").localeCompare(
                     ministryMap[b.ministryId]?.name ?? "",
                     "pt-BR"
                   )
                 )
-                .map((s) => (
-                  <View key={s.id} style={styles.block}>
+                .map((group) => (
+                  <View key={group.ministryId} style={styles.block}>
                     <Text
                       style={{
                         color: theme.colors.textMuted,
@@ -274,25 +325,27 @@ export default function LeaderPublishedSchedules() {
                         fontWeight: "600",
                       }}
                     >
-                      {ministryMap[s.ministryId]?.name}
+                      {ministryMap[group.ministryId]?.name}
                     </Text>
 
-                    {s.assignments.map((a) => (
+                    {group.userIds.map((userId) => (
                       <Text
-                        key={a.userId}
+                        key={userId}
                         style={{
                           color: theme.colors.text,
                           fontSize: 14,
                         }}
                       >
-                        • {firstName(userMap[a.userId]?.name)}
+                        • {firstName(userMap[userId]?.name)}
                       </Text>
                     ))}
                   </View>
                 ))}
-
               <Pressable
+                disabled={generalPublished}
                 onPress={() => {
+                  if (generalPublished) return;
+
                   setConfirmTarget({
                     type: "single",
                     items,
@@ -301,17 +354,26 @@ export default function LeaderPublishedSchedules() {
                 }}
                 style={[
                   styles.editBtn,
-                  { borderColor: theme.colors.danger },
+                  {
+                    borderColor: generalPublished
+                      ? theme.colors.border
+                      : theme.colors.danger,
+                    opacity: generalPublished ? 0.5 : 1,
+                  },
                 ]}
               >
                 <Text
                   style={{
-                    color: theme.colors.danger,
+                    color: generalPublished
+                      ? theme.colors.textMuted
+                      : theme.colors.danger,
                     fontWeight: "600",
                     fontSize: 13,
                   }}
                 >
-                  Voltar para rascunho
+                  {generalPublished
+                    ? "🔒 Escala geral publicada"
+                    : "Voltar para rascunho"}
                 </Text>
               </Pressable>
             </View>

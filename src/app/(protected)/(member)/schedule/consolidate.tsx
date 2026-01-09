@@ -154,7 +154,7 @@ export default function PublishedScheduleScreen() {
 
   useEffect(() => {
     async function loadMaps() {
-      const personIds = Array.from(
+      const userIds = Array.from(
         new Set(
           schedules.flatMap((s) =>
             s.assignments.map((a) => a.userId)
@@ -163,7 +163,7 @@ export default function PublishedScheduleScreen() {
       );
 
       const [names, ministryMap] = await Promise.all([
-        getPeopleNamesByIds(personIds),
+        getPeopleNamesByIds(userIds),
         getMinistryMap(),
       ]);
 
@@ -187,10 +187,33 @@ export default function PublishedScheduleScreen() {
     setMonth(d.getMonth() + 1);
   }
 
+  function groupAssignmentsByMinistry(items: Schedule[]) {
+    const map: Record<
+      string,
+      { ministryId: string; userIds: string[] }
+    > = {};
+
+    items.forEach((s) => {
+      if (!map[s.ministryId]) {
+        map[s.ministryId] = {
+          ministryId: s.ministryId,
+          userIds: [],
+        };
+      }
+
+      s.assignments.forEach((a) => {
+        map[s.ministryId].userIds.push(a.userId);
+      });
+    });
+
+    return Object.values(map);
+  }
+
   const styles = useMemo(
     () =>
       StyleSheet.create({
         wrapper: {
+          width: "100%",
           maxWidth: 520,
           alignSelf: "center",
           paddingTop: 12,
@@ -223,6 +246,7 @@ export default function PublishedScheduleScreen() {
           borderRadius: 16,
           padding: 12,
           marginBottom: 14,
+          gap: 10,
           backgroundColor: theme.colors.surface,
           borderColor: theme.colors.border,
         },
@@ -233,7 +257,6 @@ export default function PublishedScheduleScreen() {
           textTransform: "capitalize",
         },
         ministry: {
-          marginTop: 6,
           fontSize: 13,
           fontWeight: "600",
           color: theme.colors.textMuted,
@@ -285,19 +308,26 @@ export default function PublishedScheduleScreen() {
                 {ref.serviceLabel} • {formatDatePtBr(ref.serviceDate)}
               </Text>
 
-              {items.map((s) => (
-                <View key={s.id}>
-                  <Text style={styles.ministry}>
-                    {ministries[s.ministryId]}
-                  </Text>
-
-                  {s.assignments.map((a) => (
-                    <Text key={a.userId} style={styles.person}>
-                      • {firstName(peopleNames[a.userId])}
+              {groupAssignmentsByMinistry(items)
+                .sort((a, b) =>
+                  (ministries[a.ministryId] ?? "").localeCompare(
+                    ministries[b.ministryId] ?? "",
+                    "pt-BR"
+                  )
+                )
+                .map((group) => (
+                  <View key={group.ministryId}>
+                    <Text style={styles.ministry}>
+                      {ministries[group.ministryId]}
                     </Text>
-                  ))}
-                </View>
-              ))}
+
+                    {group.userIds.map((userId) => (
+                      <Text key={userId} style={styles.person}>
+                        • {firstName(peopleNames[userId])}
+                      </Text>
+                    ))}
+                  </View>
+                ))}
             </View>
           ))}
         </ScrollView>

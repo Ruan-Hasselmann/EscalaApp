@@ -58,7 +58,7 @@ export default function LeaderLayout() {
       <Tabs.Screen
         name="schedule/published"
         options={{
-          title: "Ministérios",
+          title: "Publicadas",
           tabBarIcon: ({ color, size }) => (
             <Ionicons
               name="calendar-outline"

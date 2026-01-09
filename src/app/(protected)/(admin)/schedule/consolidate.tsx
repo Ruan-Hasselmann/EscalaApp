@@ -80,6 +80,33 @@ function groupByService(schedules: Schedule[]) {
     );
 }
 
+function groupAssignmentsByMinistry(items: Schedule[]) {
+  const map: Record<
+    string,
+    {
+      ministryId: string;
+      status: Schedule["status"];
+      userIds: string[];
+    }
+  > = {};
+
+  items.forEach((s) => {
+    if (!map[s.ministryId]) {
+      map[s.ministryId] = {
+        ministryId: s.ministryId,
+        status: s.status,
+        userIds: [],
+      };
+    }
+
+    s.assignments.forEach((a) => {
+      map[s.ministryId].userIds.push(a.userId);
+    });
+  });
+
+  return Object.values(map);
+}
+
 /* =========================
    SCREEN
 ========================= */
@@ -331,7 +358,7 @@ export default function AdminPublishedSchedulesScreen() {
         </Pressable>
 
         <Text style={styles.monthTitle}>
-          {monthLabel(year, month + 1)}
+          {monthLabel(year, month)}
         </Text>
 
         <Pressable onPress={() => goTo(1)} style={styles.navBtn}>
@@ -361,29 +388,34 @@ export default function AdminPublishedSchedulesScreen() {
                 {ref.serviceLabel} • {formatDatePtBr(ref.serviceDate)}
               </Text>
 
-              {ministryList.map((m) => {
-                const schedule = items.find(
-                  (s) => s.ministryId === m.id
-                );
+              {groupAssignmentsByMinistry(items)
+                .sort((a, b) =>
+                  (ministries[a.ministryId] ?? "").localeCompare(
+                    ministries[b.ministryId] ?? "",
+                    "pt-BR"
+                  )
+                )
+                .map((group) => {
+                  const ministryName = ministries[group.ministryId];
 
-                return (
-                  <View key={m.id} style={styles.block}>
-                    <Text style={styles.ministry}>{m.name}</Text>
+                  return (
+                    <View key={group.ministryId} style={styles.block}>
+                      <Text style={styles.ministry}>{ministryName}</Text>
 
-                    {!schedule || schedule.status === "draft" ? (
-                      <Text style={styles.draft}>
-                        🟡 Escala em rascunho
-                      </Text>
-                    ) : (
-                      schedule.assignments.map((a) => (
-                        <Text key={a.userId} style={styles.person}>
-                          • {firstName(peopleNames[a.userId])}
+                      {group.status === "draft" ? (
+                        <Text style={styles.draft}>
+                          🟡 Escala em rascunho
                         </Text>
-                      ))
-                    )}
-                  </View>
-                );
-              })}
+                      ) : (
+                        group.userIds.map((userId) => (
+                          <Text key={userId} style={styles.person}>
+                            • {firstName(peopleNames[userId])}
+                          </Text>
+                        ))
+                      )}
+                    </View>
+                  );
+                })}
             </View>
           ))}
         </ScrollView>

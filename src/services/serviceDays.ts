@@ -24,6 +24,8 @@ export type ServiceTurn = {
   id: string;
   label: string;
   type: ServiceTurnType;
+
+  ministrySlots?: Record<string, number>;
 };
 
 export type ServiceDay = {
@@ -71,35 +73,40 @@ export async function upsertServiceDay({
   month,
   day,
   service,
-}: UpsertServiceDayInput) {
-  assertMonth(month);
-
+}: {
+  dateKey: string;
+  year: number;
+  month: number;
+  day: number;
+  service: ServiceTurn;
+}) {
   const ref = doc(db, "serviceDays", dateKey);
+
   const snap = await getDoc(ref);
 
-  const existing: ServiceTurn[] = snap.exists()
-    ? snap.data().services ?? []
-    : [];
-
-  const services = existing.some((s) => s.id === service.id)
-    ? existing
-    : [...existing, service];
-
-  await setDoc(
-    ref,
-    {
+  if (!snap.exists()) {
+    // cria o dia
+    await setDoc(ref, {
       dateKey,
       year,
       month,
       day,
-      dayOfWeek: computeDayOfWeek(year, month, day),
-      services,
-      active: true,
-      createdAt: snap.exists() ? snap.data().createdAt : serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    },
-    { merge: true }
-  );
+      services: [service],
+    });
+    return;
+  }
+
+  const data = snap.data() as ServiceDay;
+
+  const services = data.services ?? [];
+
+  const nextServices = services.some((s) => s.id === service.id)
+    ? services.map((s) => (s.id === service.id ? service : s))
+    : [...services, service];
+
+  await updateDoc(ref, {
+    services: nextServices,
+  });
 }
 
 /* =========================

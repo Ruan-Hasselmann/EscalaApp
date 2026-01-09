@@ -27,6 +27,8 @@ export type ServiceTurn = {
   id: string;
   label: string;
   type: "regular" | "special";
+
+  ministrySlots?: Record<string, number>;
 };
 
 export type ServiceDay = {
@@ -43,23 +45,23 @@ export type ScheduleStatus = "draft" | "published";
 
 export type ScheduleFlag =
   | {
-      type: "fixed_person_conflict";
-      userId: string;
-      conflictWithUserId: string;
-      dateKey: string;
-      serviceId: string;
-    }
+    type: "fixed_person_conflict";
+    userId: string;
+    conflictWithUserId: string;
+    dateKey: string;
+    serviceId: string;
+  }
   | {
-      type: "same_service_conflict";
-      userId: string;
-      dateKey: string;
-      serviceId: string;
-    }
+    type: "same_service_conflict";
+    userId: string;
+    dateKey: string;
+    serviceId: string;
+  }
   | {
-      type: "same_day_multiple_services";
-      userId: string;
-      dateKey: string;
-    };
+    type: "same_day_multiple_services";
+    userId: string;
+    dateKey: string;
+  };
 
 export type GeneratedAssignment = {
   userId: string;
@@ -100,8 +102,6 @@ export type GenerateSchedulesResult = {
 /* =========================
    HELPERS
 ========================= */
-
-const log = (msg: string) => console.log(`[AUTO-GEN] ${msg}`);
 
 function normalizeFirstName(name: string) {
   return (name ?? "").trim().split(" ")[0].toLowerCase();
@@ -279,69 +279,87 @@ export async function generateAndSaveDraftSchedules(
       assignedByService.set(sk, assignedByService.get(sk) ?? new Set());
 
       for (const ministryId of ministryIds) {
-        const members = memberships.filter(
-          (m) => m.ministryId === ministryId && m.active
-        );
+        const slots =
+          service.ministrySlots?.[ministryId] ?? 1;
 
-        const candidates = members
-          .map((m) => m.userId)
-          .filter((userId) => {
-            const inService = assignedByService.get(sk)!;
-            const inDay = assignedByDay.get(dayKey) ?? new Set();
-
-            for (const otherId of inService) {
-              if (
-                isRuanFabianoConflict(
-                  usersMap[userId]?.name,
-                  usersMap[otherId]?.name
-                )
-              ) {
-                return false;
-              }
-            }
-
-            if (inService.has(userId)) return false;
-            if (inDay.has(userId)) return false;
-
-            return true;
-          })
-          .sort(
-            (a, b) =>
-              (loadByUser.get(a) ?? 0) - (loadByUser.get(b) ?? 0)
+        for (let slotIndex = 0; slotIndex < slots; slotIndex++) {
+          const members = memberships.filter(
+            (m) => m.ministryId === ministryId && m.active
           );
 
-        const chosen = candidates[0];
-        if (!chosen) continue;
+          const candidates = members
+            .map((m) => m.userId)
+            .filter((userId) => {
+              const alreadyInService = assignedByService.get(sk)!;
+              const alreadyInDay = assignedByDay.get(dayKey) ?? new Set();
 
-        assignedByService.get(sk)!.add(chosen);
-        assignedByDay.set(
-          dayKey,
-          (assignedByDay.get(dayKey) ?? new Set()).add(chosen)
-        );
-        loadByUser.set(chosen, (loadByUser.get(chosen) ?? 0) + 1);
+              // 🟥 PRIORIDADE 0 — RUAN x FABIANO
+              for (const otherId of alreadyInService) {
+                if (
+                  isRuanFabianoConflict(
+                    usersMap[userId]?.name,
+                    usersMap[otherId]?.name
+                  )
+                ) {
+                  return false;
+                }
+              }
 
-        generated.push({
-          id: scheduleDocId(ministryId, day.dateKey, service.id),
-          ministryId,
-          serviceDayId: day.id,
-          serviceId: service.id,
-          serviceDate: day.dateKey,
-          serviceLabel: service.label,
-          year,
-          month,
-          status: "draft",
-          assignments: [
-            {
-              userId: chosen,
-              ministryId,
-              source: "auto",
-              flags: [],
-            },
-          ],
-          flags: [],
-          generatedAt: serverTimestamp(),
-          generatedBy: leaderUserId,
-        });
+              // ❌ mesma pessoa no mesmo culto
+              if (alreadyInService.has(userId)) return false;
+
+              // ❌ dois cultos no mesmo dia
+              if (alreadyInDay.has(userId)) return false;
+
+              return true;
+            })
+            .sort(
+              (a, b) =>
+                (loadByUser.get(a) ?? 0) -
+                (loadByUser.get(b) ?? 0)
+            );
+
+          const chosen = candidates[0];
+          if (!chosen) break; // 👈 sem candidatos → não força
+
+          // 🔒 trava no culto
+          assignedByService.get(sk)!.add(chosen);
+
+          // 🔒 trava no dia
+          assignedByDay.set(
+            dayKey,
+            (assignedByDay.get(dayKey) ?? new Set()).add(chosen)
+          );
+
+          // 📊 carga
+          loadByUser.set(
+            chosen,
+            (loadByUser.get(chosen) ?? 0) + 1
+          );
+
+          generated.push({
+            id: `${ministryId}__${day.dateKey}__${service.id}__${slotIndex}`,
+            ministryId,
+            serviceDayId: day.id,
+            serviceId: service.id,
+            serviceDate: day.dateKey,
+            serviceLabel: service.label,
+            year,
+            month,
+            status: "draft",
+            assignments: [
+              {
+                userId: chosen,
+                ministryId,
+                source: "auto",
+                flags: [],
+              },
+            ],
+            flags: [],
+            generatedAt: serverTimestamp(),
+            generatedBy: leaderUserId,
+          });
+        }
       }
     }
   }
@@ -351,8 +369,6 @@ export async function generateAndSaveDraftSchedules(
     part.forEach((s) => batch.set(doc(db, "schedules", s.id), s));
     await batch.commit();
   }
-
-  log(`Generated schedules: ${generated.length}`);
 
   return { schedules: generated, flags: [] };
 }

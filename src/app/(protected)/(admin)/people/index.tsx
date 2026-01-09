@@ -113,7 +113,7 @@ export default function AdminPeople() {
     return users
       .map((u) => {
         const userMemberships = memberships.filter(
-          (m) => m.userId === u.id
+          (m) => m.userId === u.id && m.active
         );
 
         const ministryData: PersonMinistry[] = userMemberships
