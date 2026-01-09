@@ -1,4 +1,5 @@
 import { auth, db } from "@/services/firebase";
+import { registerPushToken } from "@/services/push/pushTokens";
 import { AppUserProfile } from "@/types/user";
 import {
   onAuthStateChanged,
@@ -99,6 +100,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (unsubProfile) unsubProfile();
     };
   }, []);
+
+  useEffect(() => {
+    if (user?.uid) {
+      registerPushToken(user.uid).catch((err) =>
+        console.error("[push] register error", err)
+      );
+    }
+  }, [user?.uid]);
 
   /* =========================
      ACTIONS

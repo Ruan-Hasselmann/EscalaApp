@@ -26,12 +26,7 @@ import {
   Schedule,
   updateScheduleAssignment,
 } from "@/services/schedule/schedules";
-
-import {
-  publishServiceSchedules,
-  publishAllDraftSchedules,
-} from "@/services/schedule/schedulePublish";
-
+import { publishSchedulesByIds } from "@/services/schedule/schedulePublish";
 import {
   EditScheduleModal,
   EditableMember,
@@ -73,6 +68,18 @@ function getNextMonth() {
   const d = new Date(now.getFullYear(), now.getMonth() + 1, 1);
   return { year: d.getFullYear(), month: d.getMonth() + 1 };
 }
+
+function getServicePublishStatus(items: Schedule[]) {
+  const total = items.length;
+  const published = items.filter(
+    (s) => s.status === "published"
+  ).length;
+
+  if (published === 0) return "draft";
+  if (published < total) return "partial";
+  return "published";
+}
+
 
 /* =========================
    SCREEN
@@ -391,6 +398,7 @@ export default function LeaderGenerateSchedule() {
         {/* LISTAGEM */}
         {Object.entries(grouped).map(([key, items]) => {
           const ref = items[0];
+          const status = getServicePublishStatus(items);
 
           return (
             <View
@@ -413,13 +421,29 @@ export default function LeaderGenerateSchedule() {
                 </Text>
 
                 <Pressable
-                  onPress={() =>
-                    publishServiceSchedules(
-                      ref.serviceDate,
-                      ref.serviceId,
-                      leaderMinistryIds
-                    )
-                  }
+                disabled={status === "published"}
+                  onPress={async () => {
+                    // 🔹 schedules realmente visíveis nesse bloco
+                    const scheduleIds = items.map((s) => s.id);
+
+                    // 🔹 ministérios realmente presentes nesse culto
+                    const ministryIds = Array.from(
+                      new Set(items.map((s) => s.ministryId))
+                    );
+
+                    await publishSchedulesByIds({
+                      scheduleIds,
+                      ministryIds,
+                      context: {
+                        type: "service",
+                        serviceDate: ref.serviceDate,
+                        serviceId: ref.serviceId,
+                        serviceLabel: ref.serviceLabel,
+                        month,
+                        year,
+                      },
+                    });
+                  }}
                   style={[
                     styles.editBtn,
                     { borderColor: theme.colors.primary },
@@ -431,7 +455,11 @@ export default function LeaderGenerateSchedule() {
                       fontWeight: "600",
                     }}
                   >
-                    Publicar
+                    {status === "published"
+                      ? "Publicado"
+                      : status === "partial"
+                        ? "Publicar pendentes"
+                        : "Publicar"}
                   </Text>
                 </Pressable>
               </View>
@@ -488,9 +516,25 @@ export default function LeaderGenerateSchedule() {
         {/* PUBLICAR TUDO */}
         <Pressable
           disabled={isDisabled}
-          onPress={() =>
-            publishAllDraftSchedules(year, month, leaderMinistryIds)
-          }
+          onPress={async () => {
+            // 🔹 todos os drafts visíveis para o líder
+            const scheduleIds = draftSchedules.map((s) => s.id);
+
+            // 🔹 ministérios realmente presentes nos drafts
+            const ministryIds = Array.from(
+              new Set(draftSchedules.map((s) => s.ministryId))
+            );
+
+            await publishSchedulesByIds({
+              scheduleIds,
+              ministryIds,
+              context: {
+                type: "month",
+                month,
+                year,
+              },
+            });
+          }}
           style={[
             styles.publishAllBtn,
             {

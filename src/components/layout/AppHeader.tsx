@@ -11,6 +11,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useEffect, useMemo, useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SystemRole } from "@/types/user";
+import { useNotifications } from "@/hooks/useNotifications";
 
 type Props = {
   title: string;
@@ -23,6 +24,7 @@ export function AppHeader({ title, back }: Props) {
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
   const { profile, logout, setActiveRole } = useAuth();
+  const { unreadCount } = useNotifications();
 
   const [open, setOpen] = useState(false);
 
@@ -95,6 +97,32 @@ export function AppHeader({ title, back }: Props) {
         >
           {title}
         </Text>
+        <Pressable
+          onPress={() => router.push("/notifications")}
+          style={styles.action}
+        >
+          <Text style={{ color: theme.colors.text }}>🔔</Text>
+
+          {unreadCount > 0 && (
+            <View
+              style={[
+                styles.badge,
+                {
+                  backgroundColor: theme.colors.primary,
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.badgeText,
+                  { color: theme.colors.background },
+                ]}
+              >
+                {unreadCount}
+              </Text>
+            </View>
+          )}
+        </Pressable>
 
         {/* USER MENU */}
         <View style={{ position: "relative" }}>
@@ -222,5 +250,24 @@ const styles = StyleSheet.create({
   menuItem: {
     paddingHorizontal: 14,
     paddingVertical: 10,
+  },
+  action: {
+    position: "relative",
+    padding: 8,
+  },
+  badge: {
+    position: "absolute",
+    top: -2,
+    right: -2,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 4,
+  },
+  badgeText: {
+    fontSize: 11,
+    fontWeight: "600",
   },
 });

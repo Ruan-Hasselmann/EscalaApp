@@ -12,6 +12,7 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "../firebase";
+import { onSchedulePublished } from "../notifications/ScheduleNotifications";
 
 /* =========================
    TYPES
@@ -100,17 +101,6 @@ export function listenSchedulesByMonth(
         ...(d.data() as Omit<Schedule, "id">),
       }))
     );
-  });
-}
-
-/* =========================
-   MUTATIONS
-========================= */
-
-export async function publishSchedule(scheduleId: string) {
-  await updateDoc(doc(db, "schedules", scheduleId), {
-    status: "published",
-    publishedAt: serverTimestamp(),
   });
 }
 

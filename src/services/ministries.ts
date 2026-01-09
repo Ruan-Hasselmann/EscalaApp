@@ -7,6 +7,7 @@ import {
   updateDoc,
   orderBy,
   serverTimestamp,
+  getDoc,
 } from "firebase/firestore";
 import { db } from "./firebase";
 
@@ -127,4 +128,18 @@ export function listenMinistriesSchedule(
 
     callback(map);
   });
+}
+
+export async function getMinistryById(
+  ministryId: string
+): Promise<Ministry | null> {
+  const ref = doc(db, "ministries", ministryId);
+  const snap = await getDoc(ref);
+
+  if (!snap.exists()) return null;
+
+  return {
+    id: snap.id,
+    ...(snap.data() as Omit<Ministry, "id">),
+  };
 }

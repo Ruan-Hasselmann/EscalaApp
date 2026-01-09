@@ -53,6 +53,29 @@ export function listenMembershipsByMinistry(
   });
 }
 
+export async function listMembershipsByMinistry(
+  ministryId: string
+) {
+  const q = query(
+    collection(db, "memberships"),
+    where("ministryId", "==", ministryId),
+    where("active", "==", true)
+  );
+
+  const snap = await getDocs(q);
+
+  return snap.docs.map((d) => ({
+    id: d.id,
+    ...(d.data() as {
+      userId: string;
+      ministryId: string;
+      role: "leader" | "member";
+      active: boolean;
+    }),
+  }));
+}
+
+
 /* =========================
    LISTEN ALL (ADMIN)
 ========================= */
