@@ -1,5 +1,6 @@
 import { listMembershipsByMinistry, Membership } from "@/services/memberships";
 import { notifyUsers } from "./NotificationService";
+import { sendPushNotifications } from "./push";
 
 /* =========================
    TYPES
@@ -110,5 +111,14 @@ export async function notifySchedulesPublished(params: {
     title,
     body,
     relatedEntity,
+  });
+
+  await sendPushNotifications({
+    userIds,
+    payload: {
+      title,
+      body,
+      data: relatedEntity,
+    },
   });
 }

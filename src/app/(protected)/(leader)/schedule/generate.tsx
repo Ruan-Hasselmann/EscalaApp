@@ -316,22 +316,43 @@ export default function LeaderGenerateSchedule() {
         {/* SELECT DE MINISTÉRIO */}
         {leaderMinistries.length > 1 && (
           <View style={styles.selectWrapper}>
-            <Text style={styles.selectLabel}>Gerar escala para</Text>
+            <Text
+              style={[
+                styles.selectLabel,
+                { color: theme.colors.textMuted },
+              ]}
+            >
+              Gerar escala para
+            </Text>
 
-            <View style={styles.selectBox}>
+            <View
+              style={[
+                styles.selectBox,
+                { borderColor: theme.colors.border },
+              ]}
+            >
               <Pressable
                 onPress={() => setSelectedMinistryId("ALL")}
                 style={[
                   styles.selectOption,
-                  selectedMinistryId === "ALL" &&
-                  styles.selectOptionActive,
+                  {
+                    backgroundColor:
+                      selectedMinistryId === "ALL"
+                        ? theme.colors.primary
+                        : theme.colors.surface,
+                    borderBottomColor: theme.colors.border,
+                  },
                 ]}
               >
                 <Text
                   style={[
                     styles.selectText,
-                    selectedMinistryId === "ALL" &&
-                    styles.selectTextActive,
+                    {
+                      color:
+                        selectedMinistryId === "ALL"
+                          ? theme.colors.primaryContrast
+                          : theme.colors.text,
+                    },
                   ]}
                 >
                   Todos os meus ministérios
@@ -344,15 +365,24 @@ export default function LeaderGenerateSchedule() {
                   onPress={() => setSelectedMinistryId(m.id)}
                   style={[
                     styles.selectOption,
-                    selectedMinistryId === m.id &&
-                    styles.selectOptionActive,
+                    {
+                      backgroundColor:
+                        selectedMinistryId === m.id
+                          ? theme.colors.primary
+                          : theme.colors.surface,
+                      borderBottomColor: theme.colors.border,
+                    },
                   ]}
                 >
                   <Text
                     style={[
                       styles.selectText,
-                      selectedMinistryId === m.id &&
-                      styles.selectTextActive,
+                      {
+                        color:
+                          selectedMinistryId === m.id
+                            ? theme.colors.primaryContrast
+                            : theme.colors.text,
+                      },
                     ]}
                   >
                     {m.name}
@@ -421,7 +451,7 @@ export default function LeaderGenerateSchedule() {
                 </Text>
 
                 <Pressable
-                disabled={status === "published"}
+                  disabled={status === "published"}
                   onPress={async () => {
                     // 🔹 schedules realmente visíveis nesse bloco
                     const scheduleIds = items.map((s) => s.id);
@@ -657,30 +687,19 @@ const styles = StyleSheet.create({
   },
   selectLabel: {
     fontSize: 13,
-    color: "#999",
     fontWeight: "600",
   },
   selectBox: {
     borderWidth: 1,
-    borderColor: "#1f2937",
     borderRadius: 12,
     overflow: "hidden",
   },
   selectOption: {
     paddingVertical: 10,
     paddingHorizontal: 12,
-    backgroundColor: "#0b1220",
     borderBottomWidth: 1,
-    borderBottomColor: "#1f2937",
-  },
-  selectOptionActive: {
-    backgroundColor: "#2563eb",
   },
   selectText: {
-    color: "#cbd5e1",
     fontWeight: "600",
-  },
-  selectTextActive: {
-    color: "#fff",
   },
 });
